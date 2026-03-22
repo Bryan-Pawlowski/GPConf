@@ -19,13 +19,26 @@ public class GpConfApp
         Path.Combine(AppFolder, "gpconf.data");
 
     private MainData _mainAppData;
-    
+    private volatile bool _pendingReload = false;
+    private FileSystemWatcher _watcher = null!;
+
     //Do any creation-time prep here.
     public GpConfApp()
     {
         Directory.CreateDirectory(AppFolder);
         _mainAppData = Open();
         Migrate(_mainAppData);
+        StartWatcher();
+    }
+
+    private void StartWatcher()
+    {
+        _watcher = new FileSystemWatcher(AppFolder, "gpconf.data")
+        {
+            NotifyFilter = NotifyFilters.LastWrite,
+            EnableRaisingEvents = true,
+        };
+        _watcher.Changed += (_, _) => _pendingReload = true;
     }
 
     // Assigns IDs to any entities that predate the id field being added.
@@ -79,8 +92,11 @@ public class GpConfApp
 
     public void Save()
     {
+        // Suppress the watcher so our own save doesn't trigger a reload.
+        _watcher.EnableRaisingEvents = false;
         using FileStream file = File.Create(AppPath); // Create truncates; OpenWrite does not.
         _mainAppData.WriteTo(file);
+        _watcher.EnableRaisingEvents = true;
     }
 
     private MainData Open()
@@ -103,6 +119,13 @@ public class GpConfApp
 
     public void Update()
     {
+        if (_pendingReload)
+        {
+            _pendingReload = false;
+            _mainAppData = Open();
+            Migrate(_mainAppData);
+        }
+
         SetupDockspace();
         DoMenuBar();
     }

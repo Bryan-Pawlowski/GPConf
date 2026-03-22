@@ -24,7 +24,14 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Protobuf Include="Src\Protobuf\*.proto" ProtoRoot="Src\Protobuf" />
+      <Protobuf Include="Src\Protobuf\*.proto" ProtoRoot="Src\Protobuf" GrpcServices="None" />
+    </ItemGroup>
+
+    <!-- Exclude the sibling MCP server project from this project's compilation -->
+    <ItemGroup>
+      <Compile Remove="GPConf.McpServer\**" />
+      <None    Remove="GPConf.McpServer\**" />
+      <Content Remove="GPConf.McpServer\**" />
     </ItemGroup>
 
 </Project>
