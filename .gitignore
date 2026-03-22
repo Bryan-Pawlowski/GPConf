@@ -57,3 +57,5 @@ nunit-*.xml
 /packages/
 riderModule.iml
 /_ReSharper.Caches/
+/Installer/
+/publish/
