@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package gpconf;
+option csharp_namespace = "GPConf";
+
+// A racing driver competing in the season.
+message Driver {
+    bytes id = 1;
+    string name = 2;
+    int32 number = 3;          // Car number
+    string nationality = 4;
+    bytes current_team_id = 5; // References the driver's current team
+}
+
+// A vehicle manufacturer (constructor).
+message Manufacturer {
+    bytes id = 1;
+    string name = 2;
+}
+
+// A team competing in the season, linked to a manufacturer.
+message Team {
+    bytes id = 1;
+    string name = 2;
+    bytes manufacturer_id = 3;      // References a Manufacturer by id
+    reserved 4;                     // Previously driver_ids; drivers are now tracked per race result
+    uint32 color = 5;               // Packed RGB: 0x00RRGGBB
+}

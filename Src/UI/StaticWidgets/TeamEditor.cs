@@ -9,22 +9,20 @@ public class TeamEditor
 {
     public static void Draw(Season season)
     {
-        var taken = season.Teams
-            .SelectMany(t => t.DriverIds)
-            .ToHashSet();
+        Team? removeTeam = null;
 
-        int removeTeamIndex = -1;
-
-        for (int i = 0; i < season.Teams.Count; i++)
+        ImGui.Indent();
+        int i = 0;
+        foreach (Team team in season.Teams.OrderBy(t => t.Name))
         {
-            ImGui.PushID(i);
-            Team team = season.Teams[i];
+            ImGui.PushID(i++);
 
-            // Capture right edge before the header consumes the row.
-            float rightEdge = ImGui.GetCursorPosX() + ImGui.GetContentRegionAvail().X;
+            // Capture left and right edges before the header consumes the row.
+            float leftEdge  = ImGui.GetCursorPosX();
+            float rightEdge = leftEdge + ImGui.GetContentRegionAvail().X;
 
             // Color the header background with the team color.
-            Vector4 headerCol = ToVec4(team.Color);
+            Vector4 headerCol = ColorUtils.ToVec4(team.Color);
             ImGui.PushStyleColor(ImGuiCol.Header,        headerCol);
             ImGui.PushStyleColor(ImGuiCol.HeaderHovered, Brighten(headerCol, 0.1f));
             ImGui.PushStyleColor(ImGuiCol.HeaderActive,  Brighten(headerCol, 0.2f));
@@ -37,8 +35,8 @@ public class TeamEditor
 
             // Name InputText overlaid on the header row with transparent background.
             float arrowWidth = ImGui.GetTreeNodeToLabelSpacing();
-            ImGui.SameLine(arrowWidth);
-            ImGui.SetNextItemWidth(rightEdge - arrowWidth - 92);
+            ImGui.SameLine(leftEdge + arrowWidth);
+            ImGui.SetNextItemWidth(rightEdge - leftEdge - arrowWidth - 92);
             ImGui.PushStyleColor(ImGuiCol.FrameBg,        new Vector4(0, 0, 0, 0));
             ImGui.PushStyleColor(ImGuiCol.FrameBgHovered, new Vector4(1, 1, 1, 0.1f));
             ImGui.PushStyleColor(ImGuiCol.FrameBgActive,  new Vector4(1, 1, 1, 0.2f));
@@ -49,12 +47,12 @@ public class TeamEditor
 
             // Color picker and Remove button at the right of the header row.
             ImGui.SameLine(rightEdge - 86);
-            Vector3 col = UnpackColor(team.Color);
+            Vector3 col = ColorUtils.ToVec3(team.Color);
             if (ImGui.ColorEdit3("##color", ref col, ImGuiColorEditFlags.NoInputs))
-                team.Color = PackColor(col);
+                team.Color = ColorUtils.Pack(col);
             ImGui.SameLine(rightEdge - 58);
             if (ImGui.SmallButton("Remove"))
-                removeTeamIndex = i;
+                removeTeam = team;
 
             if (open)
             {
@@ -67,7 +65,7 @@ public class TeamEditor
                 {
                     if (ImGui.Selectable("None", team.ManufacturerId.IsEmpty))
                         team.ManufacturerId = ByteString.Empty;
-                    foreach (Manufacturer m in season.Manufacturers)
+                    foreach (Manufacturer m in season.Manufacturers.OrderBy(m => m.Name))
                     {
                         string mLabel = m.Name.Length > 0 ? m.Name : "(unnamed)";
                         if (ImGui.Selectable(mLabel, m.Id == team.ManufacturerId))
@@ -76,73 +74,34 @@ public class TeamEditor
                     ImGui.EndCombo();
                 }
 
-                // Assigned drivers with individual remove buttons.
-                int removeDriverIndex = -1;
-                for (int d = 0; d < team.DriverIds.Count; d++)
+                // Read-only list of drivers whose current team is this team.
+                var drivers = season.Drivers.Where(d => d.CurrentTeamId == team.Id).OrderBy(d => d.Name).ToList();
+                ImGui.Text($"Drivers ({drivers.Count}):");
+                ImGui.Indent();
+                if (drivers.Count == 0)
                 {
-                    ImGui.PushID(d);
-                    Driver? driver = season.Drivers.FirstOrDefault(dr => dr.Id == team.DriverIds[d]);
-                    ImGui.Text(driver?.Name.Length > 0 ? driver.Name : "(unnamed)");
-                    ImGui.SameLine();
-                    if (ImGui.SmallButton("x"))
-                        removeDriverIndex = d;
-                    ImGui.PopID();
+                    ImGui.TextDisabled("None");
                 }
-                if (removeDriverIndex >= 0)
+                else
                 {
-                    taken.Remove(team.DriverIds[removeDriverIndex]);
-                    team.DriverIds.RemoveAt(removeDriverIndex);
+                    foreach (Driver d in drivers)
+                        ImGui.Text(d.Name.Length > 0 ? d.Name : "(unnamed)");
                 }
-
-                // Unassigned driver picker.
-                var available = season.Drivers
-                    .Where(d => !taken.Contains(d.Id))
-                    .ToList();
-                if (available.Count > 0)
-                {
-                    if (ImGui.BeginCombo("##adddriver", "Add Driver..."))
-                    {
-                        foreach (Driver d in available)
-                        {
-                            string dLabel = d.Name.Length > 0 ? d.Name : "(unnamed)";
-                            if (ImGui.Selectable(dLabel))
-                            {
-                                team.DriverIds.Add(d.Id);
-                                taken.Add(d.Id);
-                            }
-                        }
-                        ImGui.EndCombo();
-                    }
-                }
+                ImGui.Unindent();
 
                 ImGui.Unindent();
             }
-
             ImGui.PopID();
         }
 
-        if (removeTeamIndex >= 0)
-            season.Teams.RemoveAt(removeTeamIndex);
+        ImGui.Unindent();
+
+        if (removeTeam != null)
+            season.Teams.Remove(removeTeam);
 
         if (ImGui.Button("Add Team##teams"))
             season.Teams.Add(new Team { Id = CCUtils.CreateUniqueId(), Name = "New Team" });
     }
-
-    private static Vector3 UnpackColor(uint packed) => new(
-        ((packed >> 16) & 0xFF) / 255f,
-        ((packed >> 8)  & 0xFF) / 255f,
-        ( packed        & 0xFF) / 255f);
-
-    private static uint PackColor(Vector3 col) =>
-        ((uint)(col.X * 255) << 16) |
-        ((uint)(col.Y * 255) << 8)  |
-         (uint)(col.Z * 255);
-
-    private static Vector4 ToVec4(uint packed) => new(
-        ((packed >> 16) & 0xFF) / 255f,
-        ((packed >> 8)  & 0xFF) / 255f,
-        ( packed        & 0xFF) / 255f,
-        1.0f);
 
     private static Vector4 Brighten(Vector4 c, float amount) => new(
         Math.Min(1f, c.X + amount),

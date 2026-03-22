@@ -1,4 +1,5 @@
-﻿using Hexa.NET.ImGui;
+﻿using GPConf.Utilities;
+using Hexa.NET.ImGui;
 
 namespace GPConf.UI.StaticWidgets;
 
@@ -13,6 +14,7 @@ public class SeasonPicker
             {
                 Season newSeason = new Season
                 {
+                    Id   = CCUtils.CreateUniqueId(),
                     Name = "New Season",
                     Year = DateTime.Now.Year
                 };

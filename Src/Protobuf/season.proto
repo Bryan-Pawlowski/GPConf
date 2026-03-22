@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package gpconf;
+option csharp_namespace = "GPConf";
+
+import "entities.proto";
+import "race.proto";
+import "confidence_game.proto";
+
+// Top-level configuration for a full racing season.
+message Season {
+    int32 year = 1;
+    string name = 2;
+    repeated Driver drivers = 3;
+    repeated Manufacturer manufacturers = 4;
+    repeated Team teams = 5;
+    repeated Race races = 6;
+    repeated PointsScoringRules rules = 7;
+    bytes id = 8;
+}
+
+message MainData {
+    repeated Season seasons = 1;
+    Season current_season = 2;
+    repeated League leagues = 3;
+}
+
+message PointsScoringRules {
+    bytes Id = 1;
+    string name = 2;
+    repeated int32 Score = 3;
+}

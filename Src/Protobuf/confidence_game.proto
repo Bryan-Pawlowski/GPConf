@@ -1,0 +1,47 @@
+﻿syntax = "proto3";
+
+package gpconf;
+option csharp_namespace = "GPConf";
+
+
+// Cross-references to Season, Race, and Driver use bytes IDs — no imports needed.
+
+
+message Player {
+  bytes Id = 1;
+  string PlayerName = 2;
+  uint32 Color = 3;             // 0x00RRGGBB packed color, 0 = unset
+}
+
+message Picks {
+  bytes PlayerId = 1;
+  repeated bytes DriverId = 2;
+}
+
+message PickRules {
+  int32 NumPicks = 1;                         // number of picks to make
+  repeated float BasePickScores = 2;          //Points scale per pick
+  map<int32, float> StandingsMultipliers = 3; // keyed by lowest position for that multiplier tier.
+  int32 PositionCutoff = 4;                   //can't pick racers at or above the listed position.
+}
+
+message League {
+  bytes Id = 1;
+  string LeagueName = 2;
+  repeated Player Players = 3;                  // Players registered to the current league
+  repeated GameSeason Seasons = 4;              // Game seasons attached to this league
+}
+
+
+message GameSeason {
+  bytes Id = 1;
+  repeated Player ParticipatingPlayers = 2;
+  repeated GameRace Races = 3;
+  bytes SeasonId = 4;                           // Links to Season.id in season.proto
+  PickRules PickRules = 5;
+}
+
+message GameRace {
+  bytes RaceId = 1;
+  repeated Picks PicksPerPlayer = 2;
+}

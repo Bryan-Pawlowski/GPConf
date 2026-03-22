@@ -5,6 +5,7 @@ using Hexa.NET.ImGui;
 using Google.Protobuf;
 using GPConf.UI;
 using GPConf.UI.StaticWidgets;
+using GPConf.Utilities;
 
 namespace GPConf;
 
@@ -24,31 +25,80 @@ public class GpConfApp
     {
         Directory.CreateDirectory(AppFolder);
         _mainAppData = Open();
+        Migrate(_mainAppData);
+    }
+
+    // Assigns IDs to any entities that predate the id field being added.
+    private static void Migrate(MainData data)
+    {
+        foreach (Season s in data.Seasons)
+            if (s.Id.IsEmpty)
+                s.Id = CCUtils.CreateUniqueId();
+
+        // Resolve CurrentSeason divergence: SeasonEditor previously wrote edits to
+        // data.CurrentSeason (a standalone copy) instead of the matching data.Seasons[i].
+        // On load, replace the in-list entry with CurrentSeason so the canonical list
+        // reflects whatever was last edited.
+        if (data.CurrentSeason != null && data.CurrentSeason.Races.Count > 0)
+        {
+            int matchIdx = -1;
+
+            // Prefer matching by ID.
+            if (!data.CurrentSeason.Id.IsEmpty)
+            {
+                for (int i = 0; i < data.Seasons.Count; i++)
+                {
+                    if (data.Seasons[i].Id == data.CurrentSeason.Id)
+                    {
+                        matchIdx = i;
+                        break;
+                    }
+                }
+            }
+
+            // Fallback: match by name when CurrentSeason.Id is empty (pre-ID saves).
+            if (matchIdx < 0)
+            {
+                for (int i = 0; i < data.Seasons.Count; i++)
+                {
+                    if (data.Seasons[i].Name == data.CurrentSeason.Name
+                        && data.Seasons[i].Races.Count == 0)
+                    {
+                        // Give CurrentSeason the in-list ID so future saves stay correlated.
+                        data.CurrentSeason.Id = data.Seasons[i].Id;
+                        matchIdx = i;
+                        break;
+                    }
+                }
+            }
+
+            if (matchIdx >= 0)
+                data.Seasons[matchIdx] = data.CurrentSeason;
+        }
     }
 
     public void Save()
     {
-        //File.Delete(AppPath);
-        FileStream file = File.OpenWrite(AppPath);
+        using FileStream file = File.Create(AppPath); // Create truncates; OpenWrite does not.
         _mainAppData.WriteTo(file);
-        file.Close();
     }
 
     private MainData Open()
     {
-        MainData outData;
-        if (File.Exists(AppPath))
+        if (!File.Exists(AppPath))
+            return new MainData();
+
+        try
         {
-            FileStream data = File.OpenRead(AppPath);
-            outData = MainData.Parser.ParseFrom(data);
-            data.Close();
+            using FileStream data = File.OpenRead(AppPath);
+            return MainData.Parser.ParseFrom(data);
         }
-        else
+        catch (Google.Protobuf.InvalidProtocolBufferException)
         {
-            File.Create(AppPath).Close();
-            outData = new MainData();
+            // Saved data is corrupt or from an incompatible schema version — start fresh.
+            File.Delete(AppPath);
+            return new MainData();
         }
-        return outData;
     }
 
     public void Update()
@@ -95,40 +145,32 @@ public class GpConfApp
             ImGui.EndMainMenuBar();
         }
         
-        if (_bOpenSeasonEditor) { SeasonEditor.Draw(this); }
+        if (_bOpenSeasonEditor)  { SeasonEditor.Draw(this); }
+        if (_bOpenSeasonUpdater) { SeasonUpdater.Draw(this); }
+        if (_bOpenLeagueEditor)  { LeagueEditor.Draw(this); }
+        if (_bOpenLeagueUpdater) { LeagueUpdater.Draw(this); }
     }
 
-    bool _bOpenSeasonEditor = false;
+    bool _bOpenSeasonEditor  = false;
+    bool _bOpenSeasonUpdater = false;
+    bool _bOpenLeagueEditor  = false;
+    bool _bOpenLeagueUpdater = false;
     private void SeasonMenu()
     {
         if (ImGui.BeginMenu("Seasons"))
         {
-            if (ImGui.MenuItem("Season Editor")) { _bOpenSeasonEditor = !_bOpenSeasonEditor; }
-            
-            if (ImGui.MenuItem("Season Updater")) { }
+            if (ImGui.MenuItem("Season Editor"))  { _bOpenSeasonEditor  = !_bOpenSeasonEditor; }
+            if (ImGui.MenuItem("Season Updater")) { _bOpenSeasonUpdater = !_bOpenSeasonUpdater; }
             ImGui.EndMenu();
         }
-
     }
 
     private void ConfCupMenu()
     {
         if (ImGui.BeginMenu("Conf Cup"))
         {
-            if (ImGui.BeginMenu("Leagues"))
-            {
-                string league = "POOP LEAGUE";
-                if (ImGui.BeginMenu($"Current League: {league}##ConfCup"))
-                {
-                    
-                    ImGui.EndMenu();
-                }
-                if(ImGui.MenuItem("Rules")) { }
-                if(ImGui.MenuItem("Picks")) { }
-
-                ImGui.EndMenu();
-            }
-            if (ImGui.MenuItem("Season Updater")) { }
+            if (ImGui.MenuItem("League Editor"))  { _bOpenLeagueEditor  = !_bOpenLeagueEditor; }
+            if (ImGui.MenuItem("League Updater")) { _bOpenLeagueUpdater = !_bOpenLeagueUpdater; }
             ImGui.EndMenu();
         }
     }

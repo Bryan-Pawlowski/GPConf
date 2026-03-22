@@ -9,7 +9,11 @@ public class SeasonEditor
         MainData data = app.GetMainData();
         ImGui.Begin("Season Editor");
 
-        Season currentSeason = data.CurrentSeason;
+        // After a save/reload, data.CurrentSeason is a separate protobuf copy from the
+        // matching entry in data.Seasons. Resolve against the list so edits always go
+        // to data.Seasons[i] and are visible to LeagueEditor's race prepopulation.
+        Season currentSeason = data.Seasons.FirstOrDefault(s => s.Id == data.CurrentSeason?.Id)
+                            ?? data.CurrentSeason;
         SeasonPicker.Draw(data, ref currentSeason);
 
         if (currentSeason != null)
@@ -22,14 +26,20 @@ public class SeasonEditor
             if (ImGui.InputInt("Year##SeasonEditor", ref year))
                 currentSeason.Year = year;
 
+            if (ImGui.CollapsingHeader("Manufacturers##SeasonEditor"))
+                ManufacturerEditor.Draw(currentSeason);
+
             if (ImGui.CollapsingHeader("Teams##SeasonEditor"))
                 TeamEditor.Draw(currentSeason);
 
             if (ImGui.CollapsingHeader("Drivers##SeasonEditor"))
                 DriverEditor.Draw(currentSeason);
 
-            if (ImGui.CollapsingHeader("Manufacturers##SeasonEditor"))
-                ManufacturerEditor.Draw(currentSeason);
+            if (ImGui.CollapsingHeader("Schedule##SeasonEditor"))
+                RaceConfig.Draw(currentSeason);
+
+            if (ImGui.CollapsingHeader("Points Scoring Rules##SeasonEditor"))
+                PointsScoringEditor.Draw(currentSeason);
         }
 
         if (ImGui.Button("Save##SeasonEditor")) app.Save();

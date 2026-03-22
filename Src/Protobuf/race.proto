@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package gpconf;
+option csharp_namespace = "GPConf";
+
+// Fastest and average lap times recorded for a single driver in a session.
+message LapData {
+    bytes driver_id = 1;
+    float fastest_lap_seconds = 2;
+    float average_lap_seconds = 3;
+    int32 quali_session_eliminated = 4; // Qualifying only: 1-based session number eliminated in; 0 = not eliminated
+}
+
+// A free practice session (FP1, FP2, FP3, etc.).
+message PracticeSession {
+    int32 session_number = 1;       // 1 = FP1, 2 = FP2, 3 = FP3
+    repeated LapData lap_data = 2;
+}
+
+// A qualifying stage (Q1, Q2, Q3, or single-session formats).
+message QualifyingSession {
+    int32 stage = 1;                // 1 = Q1, 2 = Q2, 3 = Q3
+    repeated LapData lap_data = 2;
+    string session_name = 3;
+}
+
+enum FinishStatus {
+    FINISH_STATUS_UNSPECIFIED = 0;
+    FINISH_STATUS_FINISHED = 1;
+    FINISH_STATUS_DNF = 2;          // Did Not Finish
+    FINISH_STATUS_DNS = 3;          // Did Not Start
+    FINISH_STATUS_DSQ = 4;          // Disqualified
+}
+
+// A single driver's result within a race, including the team they entered with.
+message RaceDriverResult {
+    bytes driver_id = 1;
+    int32 position = 2;
+    float points = 3;
+    float race_time = 4;
+    float fastest_lap_seconds = 5;
+    int32 laps_completed = 6;
+    FinishStatus status = 7;
+    bytes team_id = 8;              // Team the driver raced for in this event
+}
+
+message RaceResult{
+    string race_name = 1;
+    repeated RaceDriverResult results = 2;
+    bytes PointRulesId = 3;
+}
+
+// A full race weekend event.
+message Race {
+    bytes id = 1;
+    string name = 2;
+    string circuit = 3;
+    int32 round = 4;
+    repeated PracticeSession practices = 5;
+    repeated QualifyingSession qualifying_sessions = 6;
+    reserved 7;
+    repeated RaceResult race_results = 8;
+}
