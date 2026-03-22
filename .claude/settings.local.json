@@ -1,0 +1,44 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(powershell -ExecutionPolicy Bypass -File Installerbuild.ps1)",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File \"Installer/build.ps1\")",
+      "WebFetch(domain:www.formula1.com)",
+      "mcp__gpconf__UpsertRace",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File \"C:\\\\Users\\\\gonzo\\\\RiderProjects\\\\GPConf\\\\Installer\\\\build.ps1\" 2>&1)",
+      "mcp__gpconf__SetRaceResults",
+      "mcp__gpconf__UpsertManufacturer",
+      "mcp__gpconf__UpsertTeam",
+      "mcp__gpconf__UpsertDriver",
+      "Bash(curl -s \"https://api.jolpi.ca/ergast/f1/2025/1/practice/1/\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); races=d[''''MRData''''][''''RaceTable''''][''''Races'''']; print\\(json.dumps\\(races[0][''''PracticeResults''''] if races else [], indent=2\\)\\)\")",
+      "Bash(curl -s \"https://api.jolpi.ca/ergast/f1/2025/1/results/\")",
+      "Bash(curl:*)",
+      "Bash(for r:*)",
+      "Bash(do)",
+      "Bash(echo \"=== ROUND $r RACE ===\")",
+      "Bash(echo \"=== ROUND $r QUAL ===\")",
+      "Bash(echo \"=== ROUND $r FP1 ===\")",
+      "Bash(echo \"=== ROUND $r FP2 ===\")",
+      "Bash(echo \"=== ROUND $r FP3 ===\")",
+      "Bash(done)",
+      "Bash(powershell -ExecutionPolicy Bypass -File \"C:\\\\Users\\\\gonzo\\\\RiderProjects\\\\GPConf\\\\fetch_all_rounds.ps1\" 2>&1)",
+      "Bash(powershell -ExecutionPolicy Bypass -File \"C:\\\\Users\\\\gonzo\\\\RiderProjects\\\\GPConf\\\\fetch_missing.ps1\" 2>&1)",
+      "mcp__gpconf__SetQualifyingResults",
+      "mcp__gpconf__GetSeason",
+      "mcp__gpconf__SetPracticeResults",
+      "mcp__gpconf__GetRaceResults",
+      "mcp__gpconf__GetQualifyingResults",
+      "mcp__gpconf__GetPracticeResults",
+      "mcp__gpconf__GetChampionshipStandings",
+      "mcp__gpconf__GetPlayerPicks",
+      "mcp__gpconf__GetPlayerRankings"
+    ]
+  },
+  "mcpServers": {
+    "gpconf": {
+      "command": "C:\\Users\\gonzo\\RiderProjects\\GPConf\\GPConf.McpServer\\bin\\Release\\net9.0\\win-x64\\publish\\GPConf.McpServer.exe",
+      "args": []
+    }
+  }
+}

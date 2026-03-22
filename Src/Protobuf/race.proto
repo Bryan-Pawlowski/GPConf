@@ -60,4 +60,5 @@ message Race {
     repeated QualifyingSession qualifying_sessions = 6;
     reserved 7;
     repeated RaceResult race_results = 8;
+    string date = 9;                        // ISO 8601: "YYYY-MM-DD"
 }

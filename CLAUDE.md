@@ -16,6 +16,9 @@ dotnet build -c Release
 
 # Publish
 dotnet publish -c Release
+
+# Build installer (requires Inno Setup 6)
+powershell -ExecutionPolicy Bypass -File Installer\build.ps1
 ```
 
 There are no automated tests in this project.
