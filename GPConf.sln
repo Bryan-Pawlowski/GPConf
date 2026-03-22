@@ -2,6 +2,8 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GPConf", "GPConf.csproj", "{B0863442-19CB-4C07-BE24-225AF38B718B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GPConf.McpServer", "GPConf.McpServer\GPConf.McpServer.csproj", "{D1C2B3A4-E5F6-7890-ABCD-EF1234567890}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -12,5 +14,9 @@ Global
 		{B0863442-19CB-4C07-BE24-225AF38B718B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B0863442-19CB-4C07-BE24-225AF38B718B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B0863442-19CB-4C07-BE24-225AF38B718B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D1C2B3A4-E5F6-7890-ABCD-EF1234567890}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D1C2B3A4-E5F6-7890-ABCD-EF1234567890}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D1C2B3A4-E5F6-7890-ABCD-EF1234567890}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D1C2B3A4-E5F6-7890-ABCD-EF1234567890}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

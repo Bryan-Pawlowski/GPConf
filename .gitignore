@@ -57,5 +57,7 @@ nunit-*.xml
 /packages/
 riderModule.iml
 /_ReSharper.Caches/
-/Installer/
+
+# Publish output and installer binaries
 /publish/
+/Installer/output/
