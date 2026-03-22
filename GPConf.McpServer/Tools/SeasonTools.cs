@@ -9,6 +9,27 @@ namespace GPConf.McpServer.Tools;
 public class SeasonTools(GpConfDataAccess data)
 {
     [McpServerTool]
+    [Description("Creates a new season. Returns an error if a season with the same name already exists, allowing multiple series (e.g. Formula 1, WEC, MotoGP) to share the same year.")]
+    public string CreateSeason(
+        [Description("Season display name, e.g. 'F1 2025' or 'WEC 2025'")] string name,
+        [Description("Season year, e.g. 2025")] int year)
+    {
+        var mainData = data.Load();
+        if (GpConfDataAccess.FindSeason(mainData, name) is not null)
+            return $"Season '{name}' already exists.";
+
+        var season = new Season
+        {
+            Id   = GpConfDataAccess.NewId(),
+            Name = name,
+            Year = year,
+        };
+        mainData.Seasons.Add(season);
+        data.Save(mainData);
+        return $"Season '{name}' ({year}) created.";
+    }
+
+    [McpServerTool]
     [Description("Lists all seasons stored in the GPConf data file.")]
     public string ListSeasons()
     {

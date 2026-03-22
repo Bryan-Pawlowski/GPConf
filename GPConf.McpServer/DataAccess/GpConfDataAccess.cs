@@ -40,6 +40,10 @@ public class GpConfDataAccess
         season.Teams.FirstOrDefault(t =>
             t.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 
+    public static Manufacturer? FindManufacturer(Season season, string name) =>
+        season.Manufacturers.FirstOrDefault(m =>
+            m.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+
     public static Race? FindRace(Season season, string nameOrRound)
     {
         if (int.TryParse(nameOrRound, out int round))

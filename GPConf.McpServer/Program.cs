@@ -11,6 +11,8 @@ builder.Services
     .AddMcpServer()
     .WithStdioServerTransport()
     .WithTools<SeasonTools>()
-    .WithTools<RaceTools>();
+    .WithTools<RaceTools>()
+    .WithTools<EntityTools>()
+    .WithTools<QueryTools>();
 
 await builder.Build().RunAsync();

@@ -13,7 +13,7 @@ file record RaceResultInput(
     string TeamName,
     int    Position,
     float  Points,
-    string Status,         // "Finished" | "DNF" | "DNS" | "DSQ"
+    string Status,         // "Finished" | "DNF" | "DNS" | "DSQ"   
     float  RaceTime,
     float  FastestLap,
     int    LapsCompleted);
