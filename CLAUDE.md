@@ -58,6 +58,17 @@ All UI is **immediate-mode ImGui**. Widgets are static classes with a `Draw` or 
 - `StaticWidgets/DriverEditor` — driver list editor (add/edit name, number, nationality) inside SeasonEditor
 - `UI/SeasonUpdater`, `StaticWidgets/RaceConfig`, `StaticWidgets/RaceUpdater` — stubs not yet implemented
 
+### Race result data conventions
+
+When ingesting race results via `set_race_results`, the `LapsCompleted` field stores **laps behind the leader**, not raw laps completed:
+
+```
+LapsCompleted = [Leader's laps completed] - [Driver's laps completed]
+```
+
+- Finishers on the lead lap → `0`
+- DNF/DNS with 0 laps started → leader's total lap count
+
 ### ImGui ID hygiene
 
 Widget labels use the `##SufixName` convention to avoid ID collisions (e.g. `"Name##SeasonEditor"`). Always include a unique `##` suffix scoped to the widget class.
