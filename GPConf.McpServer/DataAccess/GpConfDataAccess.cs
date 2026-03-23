@@ -17,6 +17,18 @@ public class GpConfDataAccess
 
     public void Save(MainData data)
     {
+        // Keep CurrentSeason in sync with the matching entry in data.Seasons so that
+        // the app's Migrate() step (which replaces the list entry with CurrentSeason)
+        // does not overwrite MCP-written changes with stale data.
+        if (data.CurrentSeason != null)
+        {
+            Season? match = data.Seasons.FirstOrDefault(s =>
+                (!s.Id.IsEmpty && s.Id == data.CurrentSeason.Id) ||
+                s.Name.Equals(data.CurrentSeason.Name, StringComparison.OrdinalIgnoreCase));
+            if (match != null)
+                data.CurrentSeason = match;
+        }
+
         Directory.CreateDirectory(Path.GetDirectoryName(DataPath)!);
         using var fs = new FileStream(DataPath, FileMode.Create, FileAccess.Write);
         data.WriteTo(fs);

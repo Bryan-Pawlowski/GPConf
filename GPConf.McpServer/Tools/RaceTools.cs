@@ -67,11 +67,12 @@ public class RaceTools(GpConfDataAccess data)
     }
 
     [McpServerTool]
-    [Description("Sets the race results for a specific race. Pass results as a JSON array of objects with fields: DriverName, TeamName, Position, Points, Status (Finished|DNF|DNS|DSQ), RaceTime, FastestLap, LapsCompleted.")]
+    [Description("Sets the race results for a specific race. Pass results as a JSON array of objects with fields: DriverName, TeamName, Position, Points, Status (Finished|DNF|DNS|DSQ), RaceTime, FastestLap, LapsCompleted. Use sessionName to store sprint results separately (e.g. 'Chinese Grand Prix Sprint').")]
     public string SetRaceResults(
         [Description("Season name or year")] string season,
         [Description("Race name or round number")] string race,
-        [Description("JSON array of race results")] string resultsJson)
+        [Description("JSON array of race results")] string resultsJson,
+        [Description("Optional session name override; defaults to the race name. Use e.g. 'Chinese Grand Prix Sprint' to store sprint results.")] string? sessionName = null)
     {
         var mainData = data.Load();
         var s = GpConfDataAccess.FindSeason(mainData, season);
@@ -85,9 +86,11 @@ public class RaceTools(GpConfDataAccess data)
         catch (Exception ex) { return $"Invalid results JSON: {ex.Message}"; }
         if (inputs is null) return "Results JSON was null.";
 
+        var effectiveSessionName = string.IsNullOrWhiteSpace(sessionName) ? r.Name : sessionName;
+
         // Build a single RaceResult entry (or replace existing one).
-        var raceResult = r.RaceResults.FirstOrDefault(rr => rr.RaceName == r.Name)
-                      ?? new RaceResult { RaceName = r.Name };
+        var raceResult = r.RaceResults.FirstOrDefault(rr => rr.RaceName == effectiveSessionName)
+                      ?? new RaceResult { RaceName = effectiveSessionName };
 
         raceResult.Results.Clear();
         foreach (var inp in inputs)
@@ -112,7 +115,7 @@ public class RaceTools(GpConfDataAccess data)
             r.RaceResults.Add(raceResult);
 
         data.Save(mainData);
-        return $"Saved {raceResult.Results.Count} results for '{r.Name}'.";
+        return $"Saved {raceResult.Results.Count} results for '{effectiveSessionName}'.";
     }
 
     [McpServerTool]

@@ -32,13 +32,41 @@
       "mcp__gpconf__GetPracticeResults",
       "mcp__gpconf__GetChampionshipStandings",
       "mcp__gpconf__GetPlayerPicks",
-      "mcp__gpconf__GetPlayerRankings"
+      "mcp__gpconf__GetPlayerRankings",
+      "Bash(printf '{\"\"\"\"jsonrpc\"\"\"\":\"\"\"\"2.0\"\"\"\",\"\"\"\"id\"\"\"\":1,\"\"\"\"method\"\"\"\":\"\"\"\"initialize\"\"\"\",\"\"\"\"params\"\"\"\":{\"\"\"\"protocolVersion\"\"\"\":\"\"\"\"2024-11-05\"\"\"\",\"\"\"\"capabilities\"\"\"\":{},\"\"\"\"clientInfo\"\"\"\":{\"\"\"\"name\"\"\"\":\"\"\"\"test\"\"\"\",\"\"\"\"version\"\"\"\":\"\"\"\"1\"\"\"\"}}}\\\\n')",
+      "Bash('C:/Program Files \\(x86\\)/GPConf/mcp/GPConf.McpServer.exe')",
+      "Read(//tmp/**)",
+      "Bash(printf '{\"\"\"\"jsonrpc\"\"\"\":\"\"\"\"2.0\"\"\"\",\"\"\"\"id\"\"\"\":1,\"\"\"\"method\"\"\"\":\"\"\"\"initialize\"\"\"\",\"\"\"\"params\"\"\"\":{\"\"\"\"protocolVersion\"\"\"\":\"\"\"\"2024-11-05\"\"\"\",\"\"\"\"capabilities\"\"\"\":{},\"\"\"\"clientInfo\"\"\"\":{\"\"\"\"name\"\"\"\":\"\"\"\"test\"\"\"\",\"\"\"\"version\"\"\"\":\"\"\"\"1\"\"\"\"}}}\\\\n{\"\"\"\"jsonrpc\"\"\"\":\"\"\"\"2.0\"\"\"\",\"\"\"\"method\"\"\"\":\"\"\"\"notifications/initialized\"\"\"\",\"\"\"\"params\"\"\"\":{}}\\\\n{\"\"\"\"jsonrpc\"\"\"\":\"\"\"\"2.0\"\"\"\",\"\"\"\"id\"\"\"\":2,\"\"\"\"method\"\"\"\":\"\"\"\"tools/list\"\"\"\",\"\"\"\"params\"\"\"\":{}}\\\\n')",
+      "Bash(powershell.exe -Command \"\\(Get-Item 'C:/Program Files \\(x86\\)/GPConf/mcp/ModelContextProtocol.dll'\\).VersionInfo.FileVersion\" 2>&1)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "mcp__gpconf__list_seasons",
+      "mcp__gpconf__create_season",
+      "mcp__gpconf__upsert_team",
+      "mcp__gpconf__upsert_driver",
+      "mcp__gpconf__upsert_race",
+      "mcp__gpconf__set_qualifying_results",
+      "mcp__gpconf__set_race_results",
+      "mcp__gpconf__get_season",
+      "mcp__gpconf__get_race_results",
+      "Bash(python3:*)",
+      "Bash(pip install:*)",
+      "mcp__gpconf__set_practice_results",
+      "WebFetch(domain:www.motorsport.com)"
     ]
   },
   "mcpServers": {
     "gpconf": {
-      "command": "C:\\Users\\gonzo\\RiderProjects\\GPConf\\GPConf.McpServer\\bin\\Release\\net9.0\\win-x64\\publish\\GPConf.McpServer.exe",
+      "command": "C:\\Program Files (x86)\\GPConf\\mcp\\GPConf.McpServer.exe",
       "args": []
+    },
+    "kaggle": {
+      "command": "C:\\Users\\Angel\\.local\\bin\\kaggle-mcp.exe",
+      "args": [],
+      "env": {
+        "KAGGLE_USERNAME": "bryanp12",
+        "KAGGLE_KEY": "KGAT_cfac4b39cc8edf6bf3a8bfbd16e308ed"
+      }
     }
   }
 }

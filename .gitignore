@@ -59,5 +59,7 @@ riderModule.iml
 /_ReSharper.Caches/
 
 # Publish output and installer binaries
+*/publish/
 /publish/
 /Installer/output/
+/ExampleRaceData/
