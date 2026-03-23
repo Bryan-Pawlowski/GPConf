@@ -88,6 +88,21 @@ public class GpConfApp
             if (matchIdx >= 0)
                 data.Seasons[matchIdx] = data.CurrentSeason;
         }
+
+        // Sanitize race results: any RaceDriverResult with no TeamId pinned defaults to
+        // the driver's registered team at load time, preventing drift when the driver
+        // later changes teams.
+        foreach (Season s in data.Seasons)
+        {
+            var driverTeam = s.Drivers.ToDictionary(d => d.Id, d => d.CurrentTeamId);
+            foreach (Race race in s.Races)
+                foreach (RaceResult rr in race.RaceResults)
+                    foreach (RaceDriverResult res in rr.Results)
+                        if (res.TeamId.IsEmpty
+                            && driverTeam.TryGetValue(res.DriverId, out var tid)
+                            && !tid.IsEmpty)
+                            res.TeamId = tid;
+        }
     }
 
     public void Save()

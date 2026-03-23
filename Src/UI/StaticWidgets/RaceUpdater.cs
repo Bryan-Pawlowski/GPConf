@@ -354,13 +354,13 @@ public class RaceUpdater
 
                 // Per-race team override.
                 ImGui.TableSetColumnIndex(2);
-                Team? raceTeam = season.Teams.FirstOrDefault(t => t.Id == res.TeamId);
-                string teamLabel = raceTeam?.Name.Length > 0 ? raceTeam.Name : "-";
+                bool teamPinned = !res.TeamId.IsEmpty;
+                // `team` is already resolved to the effective team (pinned override or driver fallback).
+                string teamLabel = team?.Name.Length > 0 ? team.Name : "-";
+                if (!teamPinned) teamLabel += " *";
                 ImGui.SetNextItemWidth(-1);
                 if (ImGui.BeginCombo("##teamoverride", teamLabel))
                 {
-                    if (ImGui.Selectable("-", res.TeamId.IsEmpty))
-                        res.TeamId = ByteString.Empty;
                     foreach (Team tm in season.Teams.OrderBy(t => t.Name))
                     {
                         string tlbl = tm.Name.Length > 0 ? tm.Name : "(unnamed)";
@@ -369,6 +369,8 @@ public class RaceUpdater
                     }
                     ImGui.EndCombo();
                 }
+                if (!teamPinned && ImGui.IsItemHovered())
+                    ImGui.SetTooltip("Team not pinned — currently inherits from driver's registered team.\nSelect a team to lock it to this result.");
 
                 // Points (calculated, read-only).
                 ImGui.TableSetColumnIndex(3);
