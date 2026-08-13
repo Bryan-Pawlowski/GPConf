@@ -5,18 +5,27 @@ using GPConf.DiscordBot.Commands;
 using GPConf.DiscordBot.Services;
 using Microsoft.Extensions.DependencyInjection;
 
-var token = Environment.GetEnvironmentVariable("DISCORD_BOT_TOKEN")
+var token = Environment.GetEnvironmentVariable("CONF_BOT_TOKEN")
     ?? throw new InvalidOperationException(
-        "Set the DISCORD_BOT_TOKEN environment variable before running the bot.");
+        "Set the CONF_BOT_TOKEN environment variable before running the bot.");
+
+var client = new DiscordSocketClient(new DiscordSocketConfig
+{
+    GatewayIntents = GatewayIntents.None,
+    AlwaysDownloadUsers = false,
+});
+
+var interactions = new InteractionService(client, new InteractionServiceConfig
+{
+    LogLevel = LogSeverity.Info,
+    UseCompiledLambda = true,
+});
 
 var services = new ServiceCollection()
     .AddSingleton<DataService>()
-    .AddSingleton<InteractionService>()
-    .AddSingleton<DiscordSocketClient>()
+    .AddSingleton(client)
+    .AddSingleton(interactions)
     .BuildServiceProvider();
-
-var client = services.GetRequiredService<DiscordSocketClient>();
-var interactions = services.GetRequiredService<InteractionService>();
 
 client.Log += log => { Console.WriteLine($"[Discord] {log.Message}"); return Task.CompletedTask; };
 interactions.Log += log => { Console.WriteLine($"[Interactions] {log.Message}"); return Task.CompletedTask; };
