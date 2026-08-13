@@ -27,11 +27,14 @@
       <Protobuf Include="Src\Protobuf\*.proto" ProtoRoot="Src\Protobuf" GrpcServices="None" />
     </ItemGroup>
 
-    <!-- Exclude the sibling MCP server project from this project's compilation -->
+    <!-- Exclude the sibling MCP server and Discord bot projects from this project's compilation -->
     <ItemGroup>
       <Compile Remove="GPConf.McpServer\**" />
       <None    Remove="GPConf.McpServer\**" />
       <Content Remove="GPConf.McpServer\**" />
+      <Compile Remove="GPConf.DiscordBot\**" />
+      <None    Remove="GPConf.DiscordBot\**" />
+      <Content Remove="GPConf.DiscordBot\**" />
     </ItemGroup>
 
 </Project>

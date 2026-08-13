@@ -1,8 +1,9 @@
 # Discord pick'em bot — design & tech plan
 
-> As of `421462d` + uncommitted changes (see [log.md](log.md)). **Design-only
-> — no code for this exists in the repo yet.** This page documents decisions
-> made during planning so a future session doesn't re-derive them.
+> As of `4f40de8` + uncommitted scaffold (see [log.md](log.md)). The
+> `GPConf.DiscordBot/` project scaffold (DM-only read commands) is in the
+> working tree but not yet committed; the race-week orchestration skills and
+> pick-submission flow remain design-only.
 
 ## Concept
 
@@ -54,9 +55,14 @@ below for what changed and why.
 
 ## Architecture decisions
 
-- **Bot extends `GPConf.McpServer`**, not a separate data-access library or a
-  new HTTP/gRPC service layer. Same process-and-tool model as the existing
-  tool inventory (see [mcp-server.md](mcp-server.md)).
+- **Bot is a sibling project `GPConf.DiscordBot` that reads data access
+  directly**, not a separate data-access library or a new HTTP/gRPC service
+  layer. It source-links the same `GpConfDataAccess` and `CCUtils` the MCP
+  server uses (see [mcp-server.md](mcp-server.md)), so it shares the exact
+  same scoring/eligibility code without reimplementing it. It does **not**
+  spawn the MCP server per command — that would be slow and heavy for a
+  read-only slash command. The MCP server remains the AI-agent interface; the
+  bot is a parallel consumer of the same shared code.
 - **Agent drives the bot; the bot doesn't drive itself.** The Discord bot
   process stays a thin Discord-interaction layer: posting messages/embeds,
   handling select-menu and button interactions, enforcing the pick deadline,
@@ -190,22 +196,35 @@ In sequence for a normal race week:
 7. **End-of-season recap** — special case of (6) when the completed race is
    the season finale. Content/format not yet designed.
 
-## Remaining build order (nothing below is implemented yet)
+## Discord bot setup
 
-1. Persistence hardening (backups + concurrency guard).
-2. External `discord_links.json` mapping + a read-only "list league players"
+Before any bot code can run, one-time setup:
+
+1. **Create Discord application** — go to Discord Developer Portal (https://discord.com/developers/applications), create a new application, give it a name and icon.
+2. **Create bot** — under the "Bot" tab, click "Add Bot", generate a token, copy it. This token is the only credential needed.
+3. **Generate invite URL** — under "OAuth2 → URL Generator", select scopes `bot` and `applications.commands`, select the guild to invite it to. This is the URL to paste into your browser to add the bot to your Discord server.
+4. **Store the token** — `.NET` will need it, via environment variable `DISCORD_BOT_TOKEN` or a local config file (not committed). The token belongs in the same `%APPDATA%/GPConf/` folder as `discord_links.json` — e.g. `%APPDATA%/GPConf/discord_credentials.json` with `"token": "..."` — or as a system/user environment variable. **Never commit the token to git.**
+
+Then the bot appears in the server and slash commands become functional.
+
+## Remaining build order
+
+1. Discord bot setup (Developer Portal → token → invite URL).
+2. Persistence hardening (backups + concurrency guard).
+3. External `discord_links.json` mapping + a read-only "list league players"
    MCP tool to seed/review it.
-3. League/Player MCP write tools (create league, add/remove player).
-4. Discord bot project scaffold with DM-only slash commands (standings, results,
-   quali, practice, scores, pick, rules) — uses existing `QueryTools` MCP tools,
-   zero state, no chat.
-5. Fix `SetQualifyingResults` session clobbering.
-6. CSV-to-MCP results bridge (shared by the three ingestion skills).
-7. Pick-submission MCP tool, with `GetEligibleDriversWithPos` ported to a
+4. League/Player MCP write tools (create league, add/remove player).
+5. ~~Discord bot project scaffold with DM-only slash commands~~ **done** —
+   `GPConf.DiscordBot/` builds with `/standings`, `/results`, `/quali`,
+   `/practice`, `/scores`, `/pick`, `/rules` (DM-only, reads shared
+   `GpConfDataAccess`/`CCUtils` directly). Needs a real token to run.
+6. Fix `SetQualifyingResults` session clobbering.
+7. CSV-to-MCP results bridge (shared by the three ingestion skills).
+8. Pick-submission MCP tool, with `GetEligibleDriversWithPos` ported to a
    shared, MCP-exposed implementation (not duplicated bot-side).
-8. Pick-window locking (deadline-driven, from the Prep skill's epoch).
-9. Leaderboard/round-summary formatting.
-10. The seven race-week orchestration skills (prep, practice input, qualifying
+9. Pick-window locking (deadline-driven, from the Prep skill's epoch).
+10. Leaderboard/round-summary formatting.
+11. The seven race-week orchestration skills (prep, practice input, qualifying
     input, pre-race analysis, race results input, post-race recap, end-of-season).
 
 ## See also

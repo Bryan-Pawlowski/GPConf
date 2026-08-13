@@ -1,6 +1,6 @@
 # UI layer
 
-> As of `421462d` + uncommitted changes. Source: `Src/UI/`. All UI is
+> As of `4f40de8`. Source: `Src/UI/`. All UI is
 > immediate-mode ImGui — widgets are static classes with a `Draw`/`Show*`
 > method that receive data by reference and mutate it directly (root
 > `CLAUDE.md`). Labels use `"Name##SuffixScopedToWidget"` to avoid ID

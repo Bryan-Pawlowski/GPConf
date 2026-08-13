@@ -1,6 +1,6 @@
 # GPConf wiki
 
-> As of `421462d` (2026-08-12) + uncommitted working-tree changes described inline.
+> As of `4f40de8` (2026-08-13).
 
 GPConf is a Windows desktop app (ImGui + OpenGL 3.3 + SDL3, .NET) for building
 and running Formula 1 "confidence cup" fantasy seasons: season/driver/team
@@ -26,8 +26,9 @@ scraped race results.
   motorsport.com scraper and the `RaceData/` CSV dumps it produces, and the
   (currently manual) gap between "CSV on disk" and "data in `gpconf.data`".
 - **[pickem-bot-plan.md](pickem-bot-plan.md)** — design & tech plan for a
-  Discord pick'em bot extending the confidence-cup model. Design-only, no
-  code in the repo yet.
+  Discord pick'em bot extending the confidence-cup model. The `GPConf.DiscordBot/`
+  scaffold (DM-only read commands) is in the working tree; the race-week
+  orchestration skills and pick-submission flow are still design-only.
 - **[log.md](log.md)** — dated log of what changed in the codebase and in
   this wiki.
 

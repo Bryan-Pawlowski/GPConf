@@ -1,6 +1,6 @@
 # Architecture
 
-> As of `421462d` + uncommitted changes (see [log.md](log.md)).
+> As of `4f40de8`.
 
 ## Two processes, one data file
 

@@ -1,6 +1,6 @@
 # MCP server
 
-> As of `421462d` + uncommitted changes. Source: `GPConf.McpServer/`.
+> As of `4f40de8`. Source: `GPConf.McpServer/`.
 
 `GPConf.McpServer` is a separate .NET process (`Program.cs`, a minimal
 generic host) that exposes `gpconf.data` to AI agents over stdio

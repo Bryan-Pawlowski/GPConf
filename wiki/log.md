@@ -5,6 +5,29 @@ ingest. Newest first. Format: `YYYY-MM-DD — <what> — <pages touched> — <co
 
 ---
 
+**2026-08-13** — Scaffolded `GPConf.DiscordBot/`: a sibling .NET project
+(Discord.Net 3.20.1) with DM-only slash commands (`/standings`, `/results`,
+`/quali`, `/practice`, `/scores`, `/pick`, `/rules`). It source-links the same
+`GpConfDataAccess` + `CCUtils` the MCP server uses, so it reads `gpconf.data`
+directly and shares scoring/eligibility code without reimplementing it — a
+deliberate deviation from the plan's earlier "bot extends the MCP server"
+wording (spawning an MCP subprocess per command would be slow/heavy). Added
+`GPConf.DiscordBot\**` to `GPConf.csproj`'s compile-exclusion list and to the
+solution. Builds clean. Needs a real `DISCORD_BOT_TOKEN` to run. Pages touched:
+[pickem-bot-plan.md](pickem-bot-plan.md), [race-data-pipeline.md](race-data-pipeline.md).
+— uncommitted.
+
+**2026-08-13** — Committed `4f40de8` ("feat: race data pipeline, scoring
+multiplier rework, DM bot design"): the previously-uncommitted working-tree
+diff (`is_complete`, `conf_cup_multiplier`, `RaceUpdater` starting grid,
+MCP query de-dup, self-contained packaging) plus the `RaceData/` CSVs and the
+wiki. Refreshed all wiki "As of" lines to `4f40de8` and dropped the
+"uncommitted"/"untracked" qualifiers that no longer apply. Pages touched:
+[index.md](index.md), [architecture.md](architecture.md), [data-model.md](data-model.md),
+[mcp-server.md](mcp-server.md), [ui-layer.md](ui-layer.md),
+[confidence-cup-scoring.md](confidence-cup-scoring.md),
+[race-data-pipeline.md](race-data-pipeline.md). — `4f40de8`.
+
 **2026-08-13** — Added [pickem-bot-plan.md](pickem-bot-plan.md): design & tech
 plan for a Discord pick'em bot extending the confidence-cup model, produced
 by ground-truthing an externally-drafted plan (`pickem_bot.md`, not in this
@@ -62,11 +85,7 @@ repo state the wiki was seeded from:
 
 ## Known stale-page risks to watch
 
-- [data-model.md](data-model.md) and [confidence-cup-scoring.md](confidence-cup-scoring.md)
-  both describe `is_complete` and `conf_cup_multiplier` as **uncommitted**.
-  Once that working-tree diff is committed, update both pages' "As of" lines
-  to the new commit hash and drop the "uncommitted" qualifiers — the
-  behavior described won't change, just its status.
-- [race-data-pipeline.md](race-data-pipeline.md) describes `RaceData/` as
-  untracked. If it gets committed (or `.gitignore`d, or replaced by an
-  automated ingestion script), that page's "gap" framing needs revisiting.
+- [race-data-pipeline.md](race-data-pipeline.md) describes the CSV→JSON
+  ingestion gap as manual/agent-driven. If an automated bridge script lands
+  (planned as part of the Discord bot's results-ingestion skills), that page's
+  "gap" framing needs revisiting.

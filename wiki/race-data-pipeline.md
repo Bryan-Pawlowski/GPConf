@@ -1,8 +1,7 @@
 # Race data pipeline: scraper → CSV → (manual) → `gpconf.data`
 
-> As of `421462d`. Scraper source: `Python/f1_results_to_csv.py` (introduced
-> in commit `3a01b82`). Data: `RaceData/` — **untracked**, not part of any
-> commit as of this writing.
+> As of `4f40de8`. Scraper source: `Python/f1_results_to_csv.py` (introduced
+> in commit `3a01b82`). Data: `RaceData/` — committed to git as of `4f40de8`.
 
 ## The scraper — `Python/f1_results_to_csv.py`
 
@@ -58,7 +57,7 @@ cell text (e.g. `"P. Aron \n \n Alpine"` with an empty `Team` column) — the
 site's markup for those rows doesn't match the expected `<a class="ms-link">`
 structure the scraper assumes.
 
-## What's on disk (`RaceData/`, untracked)
+## What's on disk (`RaceData/`)
 
 ```
 RaceData/{Series}{Year}/{RaceLocation}/{year}_{race_slug}_{session}.csv
@@ -97,6 +96,6 @@ practical hazards to know about when doing this by hand:
 ## Related
 
 A separate, later project idea — a Discord pick'em bot extending this same
-confidence-cup model — is tracked in project memory, not in this repo; it
-would need mid-season player-to-Discord-account reconciliation and is not
-implemented here.
+confidence-cup model — is designed in [pickem-bot-plan.md](pickem-bot-plan.md)
+and scaffolded in `GPConf.DiscordBot/`. Its results-ingestion skills will
+formalize the CSV→JSON bridge described above.

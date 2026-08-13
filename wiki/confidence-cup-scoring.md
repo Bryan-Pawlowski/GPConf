@@ -1,7 +1,6 @@
 # Confidence cup scoring (`CCUtils`)
 
-> As of `421462d` + a significant uncommitted rework (see below and
-> [log.md](log.md)). Source: `Src/Utilities/ConfCupUtils.cs`, class `CCUtils`.
+> As of `4f40de8`. Source: `Src/Utilities/ConfCupUtils.cs`, class `CCUtils`.
 > Source-linked (not project-referenced) into `GPConf.McpServer` — see
 > [mcp-server.md](mcp-server.md) — so this is genuinely one implementation
 > shared by the desktop app and the MCP server, not two implementations kept
@@ -39,7 +38,7 @@ everywhere (see [data-model.md](data-model.md)).
   Powers the standings tooltip in `SeasonUpdater` and the `QueryTools`
   `GetChampionshipStandings` MCP tool.
 
-### 2. Confidence-cup pick scoring — **reworked, uncommitted**
+### 2. Confidence-cup pick scoring
 
 `CalculatePickScore(rules, pickIndex, champPos)`:
 
@@ -58,14 +57,14 @@ score = rules.BasePickScores[pickIndex] × standingsMultiplier(champPos)
 — the canonical entry point used by both the app and the MCP server:
 
 1. Iterate only `race.RaceResults.Where(rr => rr.IsComplete)` — **this is the
-   new `RaceResult.is_complete` field** (see
+   `RaceResult.is_complete` field** (see
    [data-model.md](data-model.md)). Incomplete/preview results don't count.
 2. For each complete session, find the driver's result and compute
    `pts = CalculatePointsForResult(...)`. Skip the session if `pts <= 0` —
    the driver has to have actually scored points in that session for the
    pick to earn anything from it.
 3. Multiply `CalculatePickScore(...)` by that session's
-   `PointsScoringRules.ConfCupMultiplier` (**new field**, falls back to `1.0`
+   `PointsScoringRules.ConfCupMultiplier` (**field**, falls back to `1.0`
    if unset/`≤0`).
 4. Sum across sessions — so a driver who scores in both a sprint and the
    main race (each with a different multiplier on its own ruleset) gets

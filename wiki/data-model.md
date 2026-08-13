@@ -1,6 +1,6 @@
 # Data model
 
-> As of `421462d` + uncommitted schema changes (marked below). Source:
+> As of `4f40de8`. Source:
 > `Src/Protobuf/*.proto`. **Never hand-edit the generated C# classes** — they
 > regenerate from these `.proto` files at build time into the `GPConf`
 > namespace (root `CLAUDE.md`).
@@ -38,8 +38,8 @@ the MCP server use the same helper (`CCUtils.CreateUniqueId()` in
 | `QualifyingSession` | `stage` (1=Q1,2=Q2,3=Q3), `repeated LapData`, `session_name` | |
 | `FinishStatus` (enum) | `UNSPECIFIED, FINISHED, DNF, DNS, DSQ` | |
 | `RaceDriverResult` | `driver_id`, `position`, `points`, `race_time`, `fastest_lap_seconds`, `laps_completed`, `status`, `team_id` | `team_id` is the team raced for *in this event* — may differ from `Driver.current_team_id` if the driver has since transferred; falls back to the driver's current team when empty (see `Migrate()` in [architecture.md](architecture.md)) |
-| `RaceResult` | `race_name`, `repeated RaceDriverResult results`, `PointRulesId` → `PointsScoringRules.Id`, **`is_complete`** (bool, field 4) | **`is_complete` is uncommitted (working tree only).** One `Race` can have multiple `RaceResult`s (e.g. sprint + main race), each with its own `race_name` and its own `PointRulesId`. Confidence-cup scoring only counts results where `is_complete == true` — see [confidence-cup-scoring.md](confidence-cup-scoring.md) |
-| `Race` | `id`, `name`, `circuit`, `round`, `practices`, `qualifying_sessions`, `race_results`, `date` (ISO 8601) | field 7 is `reserved`; **field 10 is now `reserved` too (uncommitted)** — it used to be `bool is_sprint_weekend`, removed because sprint-ness is now inferred from having a second `RaceResult` (or its `race_name` containing "sprint"), not stored as a flag |
+| `RaceResult` | `race_name`, `repeated RaceDriverResult results`, `PointRulesId` → `PointsScoringRules.Id`, **`is_complete`** (bool, field 4) | One `Race` can have multiple `RaceResult`s (e.g. sprint + main race), each with its own `race_name` and its own `PointRulesId`. Confidence-cup scoring only counts results where `is_complete == true` — see [confidence-cup-scoring.md](confidence-cup-scoring.md) |
+| `Race` | `id`, `name`, `circuit`, `round`, `practices`, `qualifying_sessions`, `race_results`, `date` (ISO 8601) | field 7 is `reserved`; **field 10 is now `reserved` too** — it used to be `bool is_sprint_weekend`, removed because sprint-ness is now inferred from having a second `RaceResult` (or its `race_name` containing "sprint"), not stored as a flag |
 
 **Note:** `race.proto` currently has no trailing newline at EOF — cosmetic,
 not a bug, don't be surprised by it in a diff.
@@ -50,7 +50,7 @@ not a bug, don't be surprised by it in a diff.
 |---|---|---|
 | `Season` | `year`, `name`, `drivers`, `manufacturers`, `teams`, `races`, `rules` (`PointsScoringRules`), `id` | |
 | `MainData` | `repeated Season seasons`, `Season current_season`, `repeated League leagues` | **the root message persisted to `gpconf.data`.** See the `current_season`-vs-`seasons[i]` divergence hazard in [architecture.md](architecture.md) |
-| `PointsScoringRules` | `Id`, `name`, `Score` (`repeated int32`, index 0 = P1 points, …), **`conf_cup_multiplier`** (float, field 4) | **`conf_cup_multiplier` is uncommitted (working tree only).** Multiplier applied when a pick scores via this rule set — e.g. give a sprint's `PointsScoringRules` a lower multiplier than the main race's. Editable in `PointsScoringEditor` |
+| `PointsScoringRules` | `Id`, `name`, `Score` (`repeated int32`, index 0 = P1 points, …), **`conf_cup_multiplier`** (float, field 4) | Multiplier applied when a pick scores via this rule set — e.g. give a sprint's `PointsScoringRules` a lower multiplier than the main race's. Editable in `PointsScoringEditor` |
 
 ## `confidence_game.proto`
 

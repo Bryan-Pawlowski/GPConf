@@ -67,10 +67,10 @@ the wiki itself:
 - Watch for contradictions between pages (e.g. a field described one way in
   `data-model.md` and used differently in `confidence-cup-scoring.md`).
 - Watch for orphan pages (not linked from `index.md`) and dangling links.
-- `RaceData/` is untracked and large (CSV data dumps) — don't let its
-  presence/absence in `git status` block wiki maintenance; it's a data
-  directory, not code, and is described qualitatively in
-  [race-data-pipeline.md](race-data-pipeline.md) rather than enumerated.
+- `RaceData/` is large (CSV data dumps) — don't let its churn in `git status`
+  block wiki maintenance; it's a data directory, not code, and is described
+  qualitatively in [race-data-pipeline.md](race-data-pipeline.md) rather than
+  enumerated.
 
 ## Conventions
 
