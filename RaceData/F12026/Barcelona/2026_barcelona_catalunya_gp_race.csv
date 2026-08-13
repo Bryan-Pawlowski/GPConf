@@ -1,0 +1,23 @@
+Position,Driver,Team,Car No.,Laps,Time,Gap,km/h,Pits,Points,Retirement
+1,Lewis Hamilton,Ferrari,44,66,1:32'28.105,,199.356,3,25,
+2,George Russell,Mercedes,63,66,1:32'47.666,19.561,198.655,2,18,
+3,Lando Norris,McLaren,1,66,1:32'51.824,4.158,198.507,2,15,
+4,Max Verstappen,Red Bull Racing,3,66,1:33'08.602,16.778,197.911,3,12,
+5,Oscar Piastri,McLaren,81,66,1:33'26.766,18.164,197.270,2,10,
+6,Isack Hadjar,Red Bull Racing,6,65,1:32'52.732,1 Lap,195.466,3,8,
+7,Pierre Gasly,Alpine,10,65,1:33'23.894,31.162,194.379,2,6,
+8,Liam Lawson,Racing Bulls,30,65,1:33'40.329,16.435,193.811,2,4,
+9,Arvid Lindblad,Racing Bulls,41,65,1:33'46.179,5.850,193.609,2,2,
+10,Franco Colapinto,Alpine,43,65,1:33'47.972,1.793,193.548,2,1,
+11,Gabriel Bortoleto,Audi,5,64,1:32'54.792,1 Lap,192.387,3,,
+12,Carlos Sainz,Williams,55,64,1:32'55.971,1.179,192.346,3,,
+13,Esteban Ocon,Haas F1 Team,31,64,1:33'27.254,31.283,191.273,3,,
+14,Sergio Perez,Cadillac F1 Team,11,63,1:32'35.874,1 Lap,190.024,3,,
+dnf,Charles Leclerc,Ferrari,16,62,1:27'31.697,1 Lap,197.838,3,,Retirement
+dnf,Andrea Kimi Antonelli,Mercedes,12,61,1:25'03.909,1 Lap,200.282,2,,Retirement
+dnf,Oliver Bearman,Haas F1 Team,87,60,1:26'37.448,1 Lap,193.452,3,,Retirement
+nc,Alex Albon,Williams,23,55,1:33'09.120,5 Laps,164.897,4,,
+dnf,Fernando Alonso,Aston Martin Racing,14,37,54'01.274,18 Laps,191.239,1,,Retirement
+dnf,Nico Hulkenberg,Audi,27,29,41'37.595,8 Laps,194.481,2,,Retirement
+dnf,Valtteri Bottas,Cadillac F1 Team,77,15,22'35.070,14 Laps,185.248,2,,Retirement
+dnf,Lance Stroll,Aston Martin Racing,18,5,7'29.057,10 Laps,185.661,1,,Retirement

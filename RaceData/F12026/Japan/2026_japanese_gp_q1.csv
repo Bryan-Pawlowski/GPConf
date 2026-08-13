@@ -1,0 +1,23 @@
+Position,Driver,Team,Car No.,Laps,Time,Gap,Tyres,km/h
+1,Charles Leclerc,Ferrari,16,6,1'29.915,,S,232.499
+2,George Russell,Mercedes,63,6,1'29.967,0.052,S,232.365
+3,Andrea Kimi Antonelli,Mercedes,12,3,1'30.035,0.068,S,232.189
+4,Oscar Piastri,McLaren,81,8,1'30.200,0.165,S,231.764
+5,Lewis Hamilton,Ferrari,44,6,1'30.309,0.109,S,231.485
+6,Nico Hulkenberg,Audi,27,8,1'30.358,0.049,S,231.359
+7,Gabriel Bortoleto,Audi,5,8,1'30.359,0.001,S,231.357
+8,Lando Norris,McLaren,1,8,1'30.401,0.042,S,231.249
+9,Max Verstappen,Red Bull Racing,3,6,1'30.519,0.118,S,230.948
+10,Pierre Gasly,Alpine,10,6,1'30.584,0.065,S,230.782
+11,Liam Lawson,Racing Bulls,30,9,1'30.657,0.073,S,230.596
+12,Isack Hadjar,Red Bull Racing,6,6,1'30.662,0.005,S,230.583
+13,Arvid Lindblad,Racing Bulls,41,9,1'30.781,0.119,S,230.281
+14,Esteban Ocon,Haas F1 Team,31,9,1'30.915,0.134,S,229.942
+15,Carlos Sainz,Williams,55,9,1'30.927,0.012,S,229.911
+16,Franco Colapinto,Alpine,43,6,1'30.931,0.004,S,229.901
+17,Alex Albon,Williams,23,9,1'31.088,0.157,S,229.505
+18,Oliver Bearman,Haas F1 Team,87,9,1'31.090,0.002,S,229.500
+19,Sergio Perez,Cadillac,11,6,1'32.206,1.116,S,226.722
+20,Valtteri Bottas,Cadillac,77,9,1'32.330,0.124,S,226.418
+21,Fernando Alonso,Aston Martin Racing,14,9,1'32.646,0.316,S,225.646
+22,Lance Stroll,Aston Martin Racing,18,9,1'32.920,0.274,S,224.980

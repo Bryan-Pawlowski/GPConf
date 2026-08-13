@@ -1,0 +1,21 @@
+Position,Driver,Team,Car No.,Laps,Time,Gap,km/h,Pits,Points,Retirement
+1,Oscar Piastri,McLaren,81,57,1:28'51.587,,208.188,1,25,
+2,Lando Norris,McLaren,4,57,1:28'56.217,4.630,208.007,1,18,
+3,George Russell,Mercedes,63,57,1:29'29.231,33.014,206.728,1,15,
+4,Max Verstappen,Red Bull Racing,1,57,1:29'31.543,2.312,206.639,1,12,
+5,Alex Albon,Williams,23,57,1:29'39.654,8.111,206.328,1,10,
+6,Andrea Kimi Antonelli,Mercedes,12,57,1:29'47.089,7.435,206.043,1,8,
+7,Charles Leclerc,Ferrari,16,57,1:29'48.623,1.534,205.984,1,6,
+8,Lewis Hamilton,Ferrari,44,57,1:29'51.773,3.150,205.864,1,4,
+9,Carlos Sainz,Williams,55,57,1:29'52.164,0.391,205.849,1,2,
+10,Yuki Tsunoda,Red Bull Racing,22,57,1:30'06.021,13.857,205.321,1,1,
+11,Isack Hadjar,Racing Bulls,6,57,1:30'06.189,0.168,205.315,1,,
+12,Esteban Ocon,Haas F1 Team,31,57,1:30'13.593,7.404,205.034,1,,
+13,Pierre Gasly,Alpine,10,57,1:30'22.032,8.439,204.715,1,,
+14,Nico Hulkenberg,Sauber,27,56,1:28'52.742,1 Lap,204.489,1,,
+15,Fernando Alonso,Aston Martin Racing,14,56,1:29'12.566,19.824,203.732,1,,
+16,Lance Stroll,Aston Martin Racing,18,56,1:29'16.749,4.183,203.573,1,,
+dnf,Liam Lawson,Racing Bulls,30,36,59'06.511,20 Laps,197.610,2,,Retirement
+dnf,Gabriel Bortoleto,Sauber,5,30,49'03.459,6 Laps,198.381,1,,Retirement
+dnf,Oliver Bearman,Haas F1 Team,87,27,43'10.773,3 Laps,202.826,,,Power Unit
+dnf,Jack Doohan,Alpine,7,0,,,,,,Collision

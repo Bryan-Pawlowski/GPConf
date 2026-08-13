@@ -1,0 +1,21 @@
+Position,Driver,Team,Car No.,Laps,Time,Gap,Tyres,km/h
+1,Charles Leclerc,Ferrari,16,32,1'16.439,,S,248.574
+2,Oscar Piastri,McLaren,81,30,1'16.563,0.124,S,248.172
+3,Lando Norris,McLaren,4,30,1'16.580,0.017,S,248.117
+4,Yuki Tsunoda,Racing Bulls,22,29,1'16.784,0.204,S,247.457
+5,Lewis Hamilton,Ferrari,44,31,1'16.859,0.075,S,247.216
+6,Isack Hadjar,Racing Bulls,6,30,1'17.019,0.160,S,246.702
+7,Max Verstappen,Red Bull Racing,1,22,1'17.063,0.044,S,246.561
+8,Nico Hulkenberg,Sauber,27,24,1'17.161,0.098,S,246.248
+9,Lance Stroll,Aston Martin Racing,18,28,1'17.279,0.118,S,245.872
+10,George Russell,Mercedes,63,30,1'17.282,0.003,S,245.863
+11,Carlos Sainz,Williams,55,30,1'17.302,0.020,M,245.799
+12,Alex Albon,Williams,23,28,1'17.302,0.000,S,245.799
+13,Fernando Alonso,Aston Martin Racing,14,27,1'17.330,0.028,S,245.710
+14,Jack Doohan,Alpine,7,30,1'17.394,0.064,S,245.507
+15,Pierre Gasly,Alpine,10,30,1'17.493,0.099,S,245.193
+16,Andrea Kimi Antonelli,Mercedes,12,31,1'17.634,0.141,S,244.748
+17,Liam Lawson,Red Bull Racing,30,30,1'17.640,0.006,S,244.729
+18,Gabriel Bortoleto,Sauber,5,29,1'17.847,0.207,S,244.078
+19,Esteban Ocon,Haas F1 Team,31,31,1'18.034,0.187,S,243.493
+20,Oliver Bearman,Haas F1 Team,87,0,,,,

@@ -1,0 +1,16 @@
+Position,Driver,Team,Car No.,Laps,Time,Gap,Tyres,km/h
+1,Oscar Piastri,McLaren,81,4,1'30.454,,S,215.393
+2,Lando Norris,McLaren,4,7,1'30.560,0.106,S,215.141
+3,Pierre Gasly,Alpine,10,7,1'30.643,0.083,S,214.944
+4,George Russell,Mercedes,63,8,1'30.664,0.021,S,214.894
+5,Andrea Kimi Antonelli,Mercedes,12,8,1'30.716,0.052,S,214.771
+6,Charles Leclerc,Ferrari,16,7,1'30.724,0.008,S,214.752
+7,Carlos Sainz,Williams,55,7,1'30.844,0.120,S,214.468
+8,Lewis Hamilton,Ferrari,44,6,1'31.009,0.165,S,214.079
+9,Max Verstappen,Red Bull Racing,1,6,1'31.019,0.010,S,214.056
+10,Yuki Tsunoda,Red Bull Racing,22,5,1'31.228,0.209,S,213.566
+11,Jack Doohan,Alpine,7,7,1'31.245,0.017,S,213.526
+12,Isack Hadjar,Racing Bulls,6,6,1'31.271,0.026,S,213.465
+13,Nico Hulkenberg,Sauber,27,8,1'31.783,0.512,S,212.274
+14,Fernando Alonso,Aston Martin Racing,14,6,1'31.886,0.103,S,212.036
+15,Esteban Ocon,Haas F1 Team,31,2,,,S,

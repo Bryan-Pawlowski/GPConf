@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Text.Json;
 using Google.Protobuf;
 using GPConf.McpServer.DataAccess;
+using GPConf.Utilities;
 using ModelContextProtocol.Server;
 
 namespace GPConf.McpServer.Tools;
@@ -192,9 +193,9 @@ public class QueryTools(GpConfDataAccess data)
                 {
                     var   dId    = picks.DriverId[i];
                     int   pos    = champPos.GetValueOrDefault(dId, 0);
-                    float score  = r.RaceResults.Count > 0
-                        ? GetPickScoreFromResults(s, rules, i, dId, r, pos)
-                        : CalculatePickScore(rules, i, pos);
+                    float score  = r.RaceResults.Any(rr => rr.IsComplete)
+                        ? CCUtils.GetPickScoreFromResults(s, rules, i, dId, r, pos)
+                        : CCUtils.CalculatePickScore(rules, i, pos);
                     total += score;
                     pickDetails.Add(new
                     {
@@ -335,9 +336,9 @@ public class QueryTools(GpConfDataAccess data)
                     {
                         var   dId   = picks.DriverId[i];
                         int   pos   = champPos.GetValueOrDefault(dId, 0);
-                        float score = race.RaceResults.Count > 0
-                            ? GetPickScoreFromResults(season, rules, i, dId, race, pos)
-                            : CalculatePickScore(rules, i, pos);
+                        float score = race.RaceResults.Any(rr => rr.IsComplete)
+                            ? CCUtils.GetPickScoreFromResults(season, rules, i, dId, race, pos)
+                            : CCUtils.CalculatePickScore(rules, i, pos);
                         playerScores[player.Id] = playerScores.GetValueOrDefault(player.Id) + score;
                     }
                 }
@@ -349,52 +350,4 @@ public class QueryTools(GpConfDataAccess data)
         return playerScores;
     }
 
-    private static float GetPickScoreFromResults(
-        Season season, PickRules rules, int pickIndex, ByteString driverId, Race race, int champPos)
-    {
-        float total = 0f;
-        foreach (var rr in race.RaceResults)
-        {
-            var rdr = rr.Results.FirstOrDefault(r => r.DriverId == driverId);
-            if (rdr is null) continue;
-            float pts = CalculatePointsForResult(season, rr, rdr);
-            if (pts <= 0) continue;
-            bool  isSprint = rr.RaceName.Contains("sprint", StringComparison.OrdinalIgnoreCase);
-            float factor   = isSprint ? 0.5f : 1.0f;
-            total += CalculatePickScore(rules, pickIndex, champPos) * factor;
-        }
-        return total;
-    }
-
-    private static float CalculatePickScore(PickRules rules, int pickIndex, int champPos)
-    {
-        if (pickIndex >= rules.BasePickScores.Count) return 0f;
-        float baseScore = rules.BasePickScores[pickIndex];
-        if (champPos == 0 || rules.StandingsMultipliers.Count == 0) return baseScore;
-
-        var   ordered    = rules.StandingsMultipliers.OrderBy(kv => kv.Key).ToList();
-        float multiplier = ordered[ordered.Count - 1].Value;
-        foreach (var kv in ordered)
-            if (champPos <= kv.Key) { multiplier = kv.Value; break; }
-
-        return baseScore * multiplier;
-    }
-
-    private static float CalculatePointsForResult(Season season, RaceResult raceResult, RaceDriverResult driverResult)
-    {
-        var rules = season.Rules.FirstOrDefault(r => r.Id == raceResult.PointRulesId);
-        if (rules is null) return 0f;
-
-        var order = raceResult.Results
-            .Where(r => r.Status == FinishStatus.Finished)
-            .OrderBy(r => r.LapsCompleted).ThenBy(r => r.RaceTime)
-            .Concat(raceResult.Results
-                .Where(r => r.Status != FinishStatus.Finished)
-                .OrderBy(r => r.LapsCompleted).ThenBy(r => r.RaceTime))
-            .ToList();
-
-        int idx = order.FindIndex(r => r.DriverId == driverResult.DriverId);
-        if (idx < 0 || idx >= rules.Score.Count) return 0f;
-        return rules.Score[idx];
-    }
 }

@@ -121,7 +121,7 @@ public class GpConfApp
 
         try
         {
-            using FileStream data = File.OpenRead(AppPath);
+              using FileStream data = File.OpenRead(AppPath);
             return MainData.Parser.ParseFrom(data);
         }
         catch (Google.Protobuf.InvalidProtocolBufferException)

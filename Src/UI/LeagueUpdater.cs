@@ -137,7 +137,7 @@ public class LeagueUpdater
     {
         PickRules rules      = gs.PickRules!;
         int       numPicks   = Math.Max(0, rules.NumPicks);
-        bool      hasResults = race.RaceResults.Count > 0;
+        bool      hasResults = race.RaceResults.Any(rr => rr.IsComplete);
 
         if (numPicks == 0)
         {
@@ -236,8 +236,8 @@ public class LeagueUpdater
                 {
                     int pos = eligible.First(e => e.driver.Id == pickedId).champPos;
                     score = hasResults
-                        ? GetPickScoreFromResults(season, rules, i, pickedId, race, pos)
-                        : CalculatePickScore(rules, i, pos);
+                        ? CCUtils.GetPickScoreFromResults(season, rules, i, pickedId, race, pos)
+                        : CCUtils.CalculatePickScore(rules, i, pos);
                 }
                 total += score;
 
@@ -436,7 +436,7 @@ public class LeagueUpdater
             Race      race       = orderedRaces[rIdx];
             Race?     prev       = rIdx > 0 ? orderedRaces[rIdx - 1] : null;
             GameRace? gr         = gs.Races.FirstOrDefault(g => g.RaceId == race.Id);
-            bool      hasResults = race.RaceResults.Count > 0;
+            bool      hasResults = race.RaceResults.Any(rr => rr.IsComplete);
             if (gr == null) continue;
 
             var eligible = GetEligibleDriversWithPos(season, prev, rules.PositionCutoff);
@@ -456,8 +456,8 @@ public class LeagueUpdater
 
                     int   champPos = eligible[eIdx].champPos;
                     float score    = hasResults
-                        ? GetPickScoreFromResults(season, rules, i, dId, race, champPos)
-                        : CalculatePickScore(rules, i, champPos);
+                        ? CCUtils.GetPickScoreFromResults(season, rules, i, dId, race, champPos)
+                        : CCUtils.CalculatePickScore(rules, i, champPos);
 
                     playerScores[player.Id] += score;
                 }
@@ -1045,29 +1045,6 @@ public class LeagueUpdater
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    // Score a pick based on actual race results.
-    // Sprint results (race_name contains "sprint") count at 0.5×; all others at 1.0×.
-    // Returns 0 if the driver did not finish in the points in any result.
-    private static float GetPickScoreFromResults(
-        Season season, PickRules rules, int pickIndex, ByteString driverId,
-        Race race, int champPos)
-    {
-        float total = 0f;
-        foreach (RaceResult rr in race.RaceResults)
-        {
-            RaceDriverResult? rdr = rr.Results.FirstOrDefault(r => r.DriverId == driverId);
-            if (rdr == null) continue;
-
-            float pts = CCUtils.CalculatePointsForResult(season, rr, rdr);
-            if (pts <= 0) continue;
-
-            bool  isSprint = rr.RaceName.Contains("sprint", StringComparison.OrdinalIgnoreCase);
-            float factor   = isSprint ? 0.5f : 1.0f;
-            total += CalculatePickScore(rules, pickIndex, champPos) * factor;
-        }
-        return total;
-    }
-
     private static List<(Driver driver, int champPos)> GetEligibleDriversWithPos(
         Season season, Race? prevRace, int positionCutoff)
     {
@@ -1098,25 +1075,6 @@ public class LeagueUpdater
         foreach (var kv in ordered)
             if (pos <= kv.Key) { mult = kv.Value; break; }
         return mult;
-    }
-
-    private static float CalculatePickScore(PickRules rules, int pickIndex, int champPos)
-    {
-        if (pickIndex >= rules.BasePickScores.Count) return 0f;
-        float baseScore = rules.BasePickScores[pickIndex];
-
-        // R1 special case: no prior standings → multiplier is always 1.0
-        if (champPos == 0) return baseScore;
-
-        if (rules.StandingsMultipliers.Count == 0) return baseScore;
-
-        var   ordered    = rules.StandingsMultipliers.OrderBy(kv => kv.Key).ToList();
-        float multiplier = ordered[ordered.Count - 1].Value;
-
-        foreach (var kv in ordered)
-            if (champPos <= kv.Key) { multiplier = kv.Value; break; }
-
-        return baseScore * multiplier;
     }
 
     private static void CenterText(string text)

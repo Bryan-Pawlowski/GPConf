@@ -67,12 +67,14 @@ public class RaceTools(GpConfDataAccess data)
     }
 
     [McpServerTool]
-    [Description("Sets the race results for a specific race. Pass results as a JSON array of objects with fields: DriverName, TeamName, Position, Points, Status (Finished|DNF|DNS|DSQ), RaceTime, FastestLap, LapsCompleted. Use sessionName to store sprint results separately (e.g. 'Chinese Grand Prix Sprint').")]
+    [Description("Sets the race results for a specific race. Pass results as a JSON array of objects with fields: DriverName, TeamName, Position, Points, Status (Finished|DNF|DNS|DSQ), RaceTime, FastestLap, LapsCompleted. Use sessionName to store sprint results separately (e.g. 'Chinese Grand Prix Sprint'). Set isComplete=true to mark the result as counting toward confidence cup scoring. Use pointsRulesName to link this result to a PointsScoringRules entry (required for conf cup multipliers to apply).")]
     public string SetRaceResults(
         [Description("Season name or year")] string season,
         [Description("Race name or round number")] string race,
         [Description("JSON array of race results")] string resultsJson,
-        [Description("Optional session name override; defaults to the race name. Use e.g. 'Chinese Grand Prix Sprint' to store sprint results.")] string? sessionName = null)
+        [Description("Optional session name override; defaults to the race name.")] string? sessionName = null,
+        [Description("Mark this result as complete so it counts toward confidence cup scoring. Defaults to false.")] bool isComplete = false,
+        [Description("Name of the PointsScoringRules entry to link to this result (e.g. 'Feature' or 'Sprint'). Required for conf cup multipliers to apply.")] string? pointsRulesName = null)
     {
         var mainData = data.Load();
         var s = GpConfDataAccess.FindSeason(mainData, season);
@@ -111,11 +113,21 @@ public class RaceTools(GpConfDataAccess data)
             });
         }
 
+        raceResult.IsComplete = isComplete;
+
+        if (!string.IsNullOrWhiteSpace(pointsRulesName))
+        {
+            var rulesEntry = s.Rules.FirstOrDefault(ru =>
+                ru.Name.Equals(pointsRulesName, StringComparison.OrdinalIgnoreCase));
+            if (rulesEntry is not null)
+                raceResult.PointRulesId = rulesEntry.Id;
+        }
+
         if (!r.RaceResults.Contains(raceResult))
             r.RaceResults.Add(raceResult);
 
         data.Save(mainData);
-        return $"Saved {raceResult.Results.Count} results for '{effectiveSessionName}'.";
+        return $"Saved {raceResult.Results.Count} results for '{effectiveSessionName}' (complete: {isComplete}).";
     }
 
     [McpServerTool]
@@ -153,7 +165,7 @@ public class RaceTools(GpConfDataAccess data)
                 session.LapData.Add(new LapData
                 {
                     DriverId                  = driver?.Id ?? Google.Protobuf.ByteString.Empty,
-                    FastestLapSeconds         = inp.Q1Time > 0 ? inp.Q1Time : inp.Q2Time > 0 ? inp.Q2Time : inp.Q3Time,
+                    FastestLapSeconds         = inp.Q3Time > 0 ? inp.Q3Time : inp.Q2Time > 0 ? inp.Q2Time : inp.Q1Time,
                     QualiSessionEliminated    = inp.QualifyingStage,
                 });
             }

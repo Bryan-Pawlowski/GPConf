@@ -1,0 +1,21 @@
+Position,Driver,Team,Car No.,Laps,Time,Gap,km/h,Pits,Points,Retirement
+1,Oscar Piastri,McLaren,81,50,1:21'06.758,,228.164,1,25,
+2,Max Verstappen,Red Bull Racing,1,50,1:21'09.601,2.843,228.031,1,18,
+3,Charles Leclerc,Ferrari,16,50,1:21'14.862,5.261,227.784,1,15,
+4,Lando Norris,McLaren,4,50,1:21'15.954,1.092,227.733,1,12,
+5,George Russell,Mercedes,63,50,1:21'33.994,18.040,226.894,1,10,
+6,Andrea Kimi Antonelli,Mercedes,12,50,1:21'41.446,7.452,226.549,1,8,
+7,Lewis Hamilton,Ferrari,44,50,1:21'45.831,4.385,226.346,1,6,
+8,Carlos Sainz,Williams,55,50,1:22'11.388,25.557,225.173,1,4,
+9,Alex Albon,Williams,23,50,1:22'13.273,1.885,225.087,1,2,
+10,Isack Hadjar,Racing Bulls,6,50,1:22'13.849,0.576,225.061,1,1,
+11,Fernando Alonso,Aston Martin Racing,14,50,1:22'22.675,8.826,224.659,1,,
+12,Liam Lawson,Racing Bulls,30,50,1:22'25.209,2.534,224.544,1,,
+13,Oliver Bearman,Haas F1 Team,87,50,1:22'25.952,0.743,224.510,1,,
+14,Esteban Ocon,Haas F1 Team,31,50,1:22'46.481,20.529,223.582,1,,
+15,Nico Hulkenberg,Sauber,27,49,1:21'11.367,1 Lap,223.385,1,,
+16,Lance Stroll,Aston Martin Racing,18,49,1:21'12.285,0.918,223.343,1,,
+17,Jack Doohan,Alpine,7,49,1:21'26.022,13.737,222.715,2,,
+18,Gabriel Bortoleto,Sauber,5,49,1:21'26.064,0.042,222.713,1,,
+dnf,Yuki Tsunoda,Red Bull Racing,22,1,2'45.662,48 Laps,128.734,1,,Collision
+dnf,Pierre Gasly,Alpine,10,0,,,,,,Collision

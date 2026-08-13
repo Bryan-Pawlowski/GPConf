@@ -29,4 +29,5 @@ message PointsScoringRules {
     bytes Id = 1;
     string name = 2;
     repeated int32 Score = 3;
+    float conf_cup_multiplier = 4;
 }

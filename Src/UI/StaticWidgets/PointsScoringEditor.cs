@@ -80,6 +80,12 @@ public class PointsScoringEditor
                 if (ImGui.Button("Add Position##pos"))
                     rules.Score.Add(0);
 
+                ImGui.Spacing();
+                float multiplier = rules.ConfCupMultiplier;
+                ImGui.SetNextItemWidth(100);
+                if (ImGui.InputFloat("Conf Cup Multiplier##multiplier", ref multiplier, 0.1f, 0.5f, "%.2f"))
+                    rules.ConfCupMultiplier = multiplier;
+
                 ImGui.Unindent();
             }
 

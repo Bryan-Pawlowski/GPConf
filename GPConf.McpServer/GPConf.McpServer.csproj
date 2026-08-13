@@ -5,6 +5,8 @@
         <TargetFramework>net9.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+        <SelfContained>true</SelfContained>
     </PropertyGroup>
 
     <ItemGroup>
@@ -20,5 +22,18 @@
     <ItemGroup>
         <Protobuf Include="..\Src\Protobuf\*.proto" ProtoRoot="..\Src\Protobuf" GrpcServices="None" />
     </ItemGroup>
+
+    <ItemGroup>
+        <Compile Include="..\Src\Utilities\ConfCupUtils.cs" Link="Utilities\ConfCupUtils.cs" />
+    </ItemGroup>
+
+
+    <Target Name="CopyToInstallDir" AfterTargets="Publish">
+        <ItemGroup>
+            <PublishedFiles Include="$(PublishDir)**\*" />
+        </ItemGroup>
+        <Copy SourceFiles="@(PublishedFiles)"
+              DestinationFiles="@(PublishedFiles->'C:\Program Files (x86)\GPConf\mcp\%(RecursiveDir)%(Filename)%(Extension)')" />
+    </Target>
 
 </Project>

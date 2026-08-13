@@ -88,6 +88,50 @@ public class CCUtils
         return rules.Score[idx]; // idx is 0-based; Score[0] = P1 points
     }
 
+    // ── Confidence Cup pick scoring ───────────────────────────────────────────
+
+    // Returns the base pick score × standings multiplier for a single pick slot.
+    // champPos == 0 means no prior standings exist (R1); multiplier defaults to 1.0.
+    public static float CalculatePickScore(PickRules rules, int pickIndex, int champPos)
+    {
+        if (pickIndex >= rules.BasePickScores.Count) return 0f;
+        float baseScore = rules.BasePickScores[pickIndex];
+
+        // R1 special case: no prior standings → multiplier is always 1.0
+        if (champPos == 0) return baseScore;
+
+        if (rules.StandingsMultipliers.Count == 0) return baseScore;
+
+        var   ordered    = rules.StandingsMultipliers.OrderBy(kv => kv.Key).ToList();
+        float multiplier = ordered[ordered.Count - 1].Value;
+        foreach (var kv in ordered)
+            if (champPos <= kv.Key) { multiplier = kv.Value; break; }
+
+        return baseScore * multiplier;
+    }
+
+    // Scores a single pick across all complete result sessions in a race weekend.
+    // Each session's contribution is scaled by its PointsScoringRules.ConfCupMultiplier
+    // (falls back to 1.0 if unset). Only sessions where the driver scored F1 points count.
+    public static float GetPickScoreFromResults(
+        Season season, PickRules rules, int pickIndex, ByteString driverId, Race race, int champPos)
+    {
+        float total = 0f;
+        foreach (RaceResult rr in race.RaceResults.Where(rr => rr.IsComplete))
+        {
+            RaceDriverResult? rdr = rr.Results.FirstOrDefault(r => r.DriverId == driverId);
+            if (rdr == null) continue;
+
+            float pts = CalculatePointsForResult(season, rr, rdr);
+            if (pts <= 0) continue;
+
+            PointsScoringRules? scoringRules = season.Rules.FirstOrDefault(r => r.Id == rr.PointRulesId);
+            float confCupMultiplier = scoringRules is { ConfCupMultiplier: > 0 } ? scoringRules.ConfCupMultiplier : 1f;
+            total += CalculatePickScore(rules, pickIndex, champPos) * confCupMultiplier;
+        }
+        return total;
+    }
+
     private static PointsScoringRules? GetPointsScoringRules(Season season, ByteString pointsScoringRulesId)
     {
         PointsScoringRules? outRuleSet = null;

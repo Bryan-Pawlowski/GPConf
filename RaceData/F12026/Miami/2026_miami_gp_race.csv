@@ -1,0 +1,23 @@
+Position,Driver,Team,Car No.,Laps,Time,Gap,km/h,Pits,Points,Retirement
+1,Andrea Kimi Antonelli,Mercedes,12,57,1:33'19.273,,198.235,1,25,
+2,Lando Norris,McLaren,1,57,1:33'22.537,3.264,198.119,1,18,
+3,Oscar Piastri,McLaren,81,57,1:33'46.365,23.828,197.280,1,15,
+4,George Russell,Mercedes,63,57,1:34'02.324,15.959,196.722,1,12,
+5,Max Verstappen,Red Bull Racing,3,57,1:34'08.222,5.898,196.691,1,10,
+6,Lewis Hamilton,Ferrari,44,57,1:34'13.026,4.804,196.350,1,8,
+7,Franco Colapinto,Alpine,43,57,1:34'21.144,8.118,196.068,1,6,
+8,Charles Leclerc,Ferrari,16,57,1:34'23.518,2.374,196.681,1,4,
+9,Carlos Sainz,Williams,55,57,1:34'41.345,17.827,195.371,1,2,
+10,Alex Albon,Williams,23,57,1:34'50.245,8.900,195.066,1,1,
+11,Oliver Bearman,Haas F1 Team,87,56,1:33'25.673,1 Lap,194.533,1,,
+12,Gabriel Bortoleto,Audi,5,56,1:33'28.626,2.953,194.430,1,,
+13,Esteban Ocon,Haas F1 Team,31,56,1:33'33.146,4.520,194.274,1,,
+14,Arvid Lindblad,Racing Bulls,41,56,1:34'04.054,30.908,193.210,1,,
+15,Fernando Alonso,Aston Martin Racing,14,56,1:34'34.237,30.183,192.182,1,,
+16,Sergio Perez,Cadillac F1 team,11,56,1:34'36.786,2.549,192.096,1,,
+17,Lance Stroll,Aston Martin Racing,18,56,1:34'41.904,5.118,191.923,2,,
+18,Valtteri Bottas,Cadillac F1 team,77,55,1:34'27.528,1 Lap,188.972,3,,
+dnf,Nico Hulkenberg,Audi,27,7,13'59.996,48 Laps,161.683,2,,Retirement
+dnf,Liam Lawson,Racing Bulls,30,6,11'15.852,1 Lap,172.124,1,,Retirement
+dnf,Pierre Gasly,Alpine,10,4,6'30.721,2 Laps,198.003,,,Accident
+dnf,Isack Hadjar,Red Bull Racing,6,4,6'35.716,4.995,195.503,,,Accident

@@ -1,0 +1,21 @@
+Position,Driver,Team,Car No.,Laps,Time,Gap,km/h,Pits,Points,Retirement
+1,Lando Norris,McLaren,4,18,36'37.647,,159.319,1,8,
+2,Oscar Piastri,McLaren,81,18,36'38.319,0.672,159.271,1,7,
+3,Lewis Hamilton,Ferrari,44,18,36'38.720,0.401,159.242,1,6,
+4,George Russell,Mercedes,63,18,36'40.774,2.054,159.093,1,5,
+5,Lance Stroll,Aston Martin Racing,18,18,36'41.059,0.285,159.072,1,4,
+6,Yuki Tsunoda,Red Bull Racing,22,18,36'42.800,1.741,158.947,1,3,
+7,Andrea Kimi Antonelli,Mercedes,12,18,36'43.282,0.482,158.912,2,2,
+8,Pierre Gasly,Alpine,10,18,36'43.620,0.338,158.888,1,1,
+9,Nico Hulkenberg,Sauber,27,18,36'43.800,0.180,158.875,1,,
+10,Isack Hadjar,Racing Bulls,6,18,36'45.149,1.349,158.777,1,,
+11,Alex Albon,Williams,23,18,36'45.169,0.020,158.776,1,,
+12,Esteban Ocon,Haas F1 Team,31,18,36'46.645,1.476,158.670,1,,
+13,Liam Lawson,Racing Bulls,30,18,36'46.671,0.026,158.668,1,,
+14,Oliver Bearman,Haas F1 Team,87,18,36'46.865,0.194,158.654,1,,
+15,Gabriel Bortoleto,Sauber,5,18,36'47.322,0.457,158.621,1,,
+16,Jack Doohan,Alpine,7,18,36'47.556,0.234,158.604,1,,
+17,Max Verstappen,Red Bull Racing,1,18,36'49.706,2.150,158.450,1,,
+dnf,Fernando Alonso,Aston Martin Racing,14,13,25'21.904,5 Laps,166.050,1,,Collision
+dnf,Carlos Sainz,Williams,55,12,24'55.152,1 Lap,155.990,2,,Spun off
+dns,Charles Leclerc,Ferrari,16,0,,,,,,Spun off

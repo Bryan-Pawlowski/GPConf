@@ -72,3 +72,16 @@ LapsCompleted = [Leader's laps completed] - [Driver's laps completed]
 ### ImGui ID hygiene
 
 Widget labels use the `##SufixName` convention to avoid ID collisions (e.g. `"Name##SeasonEditor"`). Always include a unique `##` suffix scoped to the widget class.
+
+## Wiki
+
+[`wiki/`](wiki/index.md) is a maintained LLM wiki (pattern:
+<https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f>) with
+deeper, kept-current coverage of architecture, the full protobuf data model,
+the `GPConf.McpServer` tool inventory, the UI widget tree, confidence-cup
+scoring logic, and the race-data scraping pipeline. Start at
+[`wiki/index.md`](wiki/index.md); see [`wiki/CLAUDE.md`](wiki/CLAUDE.md) for
+how to keep it updated as the code changes. Where this file and the wiki
+disagree (e.g. `SeasonUpdater`/`RaceUpdater` are no longer stubs), the wiki
+is the more current source — this file covers only build/run commands and
+stable, slow-changing conventions.

@@ -132,11 +132,67 @@ public class RaceUpdater
 
     // ── Race Results ──────────────────────────────────────────────────────────
 
+    private static void DrawStartingGrid(Season season, Race race)
+    {
+        // Flatten all LapData across qualifying sessions (one entry per driver).
+        var allLaps = race.QualifyingSessions.SelectMany(qs => qs.LapData).ToList();
+        if (allLaps.Count == 0) return;
+
+        // Same sort as the qualifying lap table: stage 0 (Q3) first, then stage 2 (Q2), then stage 1 (Q1),
+        // within each group sorted fastest to slowest.
+        var grid = allLaps
+            .OrderByDescending(ld => ld.QualiSessionEliminated == 0 ? int.MaxValue : ld.QualiSessionEliminated)
+            .ThenBy(ld => ld.FastestLapSeconds <= 0)
+            .ThenBy(ld => ld.FastestLapSeconds > 0 ? ld.FastestLapSeconds : float.MaxValue)
+            .ToList();
+
+        if (ImGui.BeginTable("##startgrid", 4, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
+        {
+            ImGui.TableSetupColumn("P",      ImGuiTableColumnFlags.WidthFixed,  30);
+            ImGui.TableSetupColumn("Driver", ImGuiTableColumnFlags.WidthStretch);
+            ImGui.TableSetupColumn("Team",   ImGuiTableColumnFlags.WidthStretch);
+            ImGui.TableSetupColumn("Q Time", ImGuiTableColumnFlags.WidthFixed,  80);
+            ImGui.TableHeadersRow();
+
+            for (int p = 0; p < grid.Count; p++)
+            {
+                LapData ld  = grid[p];
+                Driver? drv = season.Drivers.FirstOrDefault(d => d.Id == ld.DriverId);
+                Team? team  = drv != null ? season.Teams.FirstOrDefault(t => t.Id == drv.CurrentTeamId) : null;
+
+                ImGui.TableNextRow();
+
+                ImGui.TableSetColumnIndex(0);
+                ImGui.Text($"P{p + 1}");
+
+                ImGui.TableSetColumnIndex(1);
+                int drvPush = SetDriverCellBg(team);
+                ImGui.Text(DriverLabel(drv));
+                ImGui.PopStyleColor(drvPush);
+
+                ImGui.TableSetColumnIndex(2);
+                ImGui.Text(team?.Name ?? "-");
+
+                ImGui.TableSetColumnIndex(3);
+                ImGui.Text(ld.FastestLapSeconds > 0 ? FormatLapTime(ld.FastestLapSeconds) : "-");
+            }
+
+            ImGui.EndTable();
+        }
+    }
+
     private static void DrawRaceResults(Season season, Race race)
     {
         RaceResult? toRemove = null;
 
         ImGui.Indent();
+
+        if (race.QualifyingSessions.Count > 0 && ImGui.CollapsingHeader("Starting Grid##startgrid"))
+        {
+            ImGui.Indent();
+            DrawStartingGrid(season, race);
+            ImGui.Unindent();
+        }
         int i = 0;
         foreach (RaceResult rr in race.RaceResults)
         {
@@ -158,6 +214,14 @@ public class RaceUpdater
             if (ImGui.InputText("##rrname", ref rname, 64))
                 rr.RaceName = rname;
             ImGui.PopStyleColor(3);
+
+            // Complete toggle — positioned left of Remove button.
+            ImGui.SameLine(rightEdge - 120);
+            bool complete = rr.IsComplete;
+            if (ImGui.Checkbox("Complete##rrcomplete", ref complete))
+                rr.IsComplete = complete;
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Mark this result as complete to include it in confidence cup scoring.");
 
             ImGui.SameLine(rightEdge - 58);
             if (ImGui.SmallButton("Remove"))
