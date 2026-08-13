@@ -5,6 +5,13 @@ ingest. Newest first. Format: `YYYY-MM-DD — <what> — <pages touched> — <co
 
 ---
 
+**2026-08-13** — Fixed `RaceTools.SetQualifyingResults` session clobbering
+(`RaceTools.cs:153`): it unconditionally cleared `r.QualifyingSessions` on
+every call, so storing Sprint Qualifying then regular Qualifying on the same
+race wiped the first out. Now find-or-replaces each `QualifyingSession` by
+`(SessionName, Stage)`, mirroring `SetRaceResults`. Pages touched:
+[pickem-bot-plan.md](pickem-bot-plan.md). — uncommitted.
+
 **2026-08-13** — Scaffolded `GPConf.DiscordBot/`: a sibling .NET project
 (Discord.Net 3.20.1) with DM-only slash commands (`/standings`, `/results`,
 `/quali`, `/practice`, `/scores`, `/pick`, `/rules`). It source-links the same

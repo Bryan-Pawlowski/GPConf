@@ -126,7 +126,9 @@ call — so calling it once for Sprint Qualifying and again for regular
 Qualifying wipes the first one out. `SetRaceResults` doesn't have this
 problem (it finds-or-replaces by session name); `SetQualifyingResults` needs
 the same treatment before a race weekend can have both session types stored
-at once. Not yet fixed as of this writing.
+at once. **Fixed as of `1106481`** — it now find-or-replaces each
+`QualifyingSession` by `(SessionName, Stage)` instead of clearing all
+sessions.
 
 ## DM-only read commands
 
@@ -218,7 +220,8 @@ Then the bot appears in the server and slash commands become functional.
    `GPConf.DiscordBot/` builds with `/standings`, `/results`, `/quali`,
    `/practice`, `/scores`, `/pick`, `/rules` (DM-only, reads shared
    `GpConfDataAccess`/`CCUtils` directly). Needs a real token to run.
-6. Fix `SetQualifyingResults` session clobbering.
+6. ~~Fix `SetQualifyingResults` session clobbering~~ **done** (`1106481`) —
+   find-or-replace by `(SessionName, Stage)`.
 7. CSV-to-MCP results bridge (shared by the three ingestion skills).
 8. Pick-submission MCP tool, with `GetEligibleDriversWithPos` ported to a
    shared, MCP-exposed implementation (not duplicated bot-side).

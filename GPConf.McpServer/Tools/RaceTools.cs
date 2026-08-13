@@ -149,16 +149,23 @@ public class RaceTools(GpConfDataAccess data)
         catch (Exception ex) { return $"Invalid results JSON: {ex.Message}"; }
         if (inputs is null) return "Results JSON was null.";
 
-        // Group by stage to build QualifyingSession entries.
-        r.QualifyingSessions.Clear();
-        var byStage = inputs.GroupBy(i => i.QualifyingStage);
-        foreach (var group in byStage.OrderBy(g => g.Key))
+        // Group by (SessionName, Stage) so a sprint-qualifying session and a
+        // regular-qualifying session can coexist on the same race. Find-or-replace
+        // each group by that key instead of clearing all sessions, so calling this
+        // once for Sprint Qualifying and again for regular Qualifying doesn't wipe
+        // the first one out.
+        var byStage = inputs.GroupBy(i => (i.SessionName, i.QualifyingStage));
+        foreach (var group in byStage.OrderBy(g => g.Key.QualifyingStage))
         {
-            var session = new QualifyingSession
-            {
-                Stage       = group.Key,
-                SessionName = group.First().SessionName,
-            };
+            var session = r.QualifyingSessions.FirstOrDefault(qs =>
+                qs.SessionName == group.Key.SessionName && qs.Stage == group.Key.QualifyingStage)
+                ?? new QualifyingSession
+                {
+                    Stage       = group.Key.QualifyingStage,
+                    SessionName = group.Key.SessionName,
+                };
+
+            session.LapData.Clear();
             foreach (var inp in group)
             {
                 var driver = GpConfDataAccess.FindDriver(s, inp.DriverName);
@@ -169,7 +176,9 @@ public class RaceTools(GpConfDataAccess data)
                     QualiSessionEliminated    = inp.QualifyingStage,
                 });
             }
-            r.QualifyingSessions.Add(session);
+
+            if (!r.QualifyingSessions.Contains(session))
+                r.QualifyingSessions.Add(session);
         }
 
         data.Save(mainData);
