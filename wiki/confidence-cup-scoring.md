@@ -70,6 +70,29 @@ score = rules.BasePickScores[pickIndex] × standingsMultiplier(champPos)
    main race (each with a different multiplier on its own ruleset) gets
    both contributions added.
 
+## Pick eligibility and guest/junior drivers
+
+`CCUtils.GetEligibleDriversWithPos(season, prevRace, positionCutoff)` builds the pool of drivers a
+player can pick, ranked by championship points snapshot through `prevRace` and filtered to positions
+past `positionCutoff`. It's the shared entry point used by the desktop `LeagueUpdater`/`SeasonUpdater`
+and the Discord bot's pick commands (`DataService`, `PickCommands`) — see
+[pickem-bot-plan.md](pickem-bot-plan.md).
+
+Guest/junior drivers who only run practice laps in a senior driver's car (registered via
+`upsert_driver` so `set_practice_results` can resolve their name, but never entered into a qualifying
+session or race result) are excluded from this pool via `CCUtils.HasQualifiedAndStarted(season,
+driver)` — true only if the driver has a qualifying-session `LapData` entry *and* a `RaceDriverResult`
+with `status != DNS` somewhere in the season. This filter only applies from round 2 onward
+(`prevRace != null`); round 1 stays unfiltered because at season start no driver has any participation
+history yet, so gating there would empty the whole pick pool instead of just excluding guests. One
+side effect: a legitimate mid-season driver debut is also excluded from eligibility until their first
+qualifying + race-start is recorded, same as a guest would be.
+
+Championship standings themselves never needed this treatment — they're built from
+`RaceDriverResult.Points` directly (`QueryTools.GetChampionshipStandings`,
+`SeasonUpdater.DrawStandingsTooltip`), so a practice-only driver with no race result already never
+accumulates points and never appears.
+
 ## What changed and why
 
 Before this rework, `LeagueUpdater.cs` and `QueryTools.cs` each had their own

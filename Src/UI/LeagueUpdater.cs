@@ -147,7 +147,7 @@ public class LeagueUpdater
             return;
         }
 
-        var eligible = GetEligibleDriversWithPos(season, prevRace, rules.PositionCutoff);
+        var eligible = CCUtils.GetEligibleDriversWithPos(season, prevRace, rules.PositionCutoff);
 
         int colCount = 1 + numPicks + 1;
 
@@ -388,7 +388,7 @@ public class LeagueUpdater
                     string multText = prevRace == null
                         ? "×1"
                         : (eligible && rules.StandingsMultipliers.Count > 0
-                            ? $"×{GetStandingsMultiplier(rules, pos):G}" : "-");
+                            ? $"×{CCUtils.GetStandingsMultiplier(rules, pos):G}" : "-");
                     float avail = ImGui.GetContentRegionAvail().X;
                     float tw    = ImGui.CalcTextSize(multText).X;
                     if (avail > tw) ImGui.SetCursorPosX(ImGui.GetCursorPosX() + (avail - tw) * 0.5f);
@@ -439,7 +439,7 @@ public class LeagueUpdater
             bool      hasResults = race.RaceResults.Any(rr => rr.IsComplete);
             if (gr == null) continue;
 
-            var eligible = GetEligibleDriversWithPos(season, prev, rules.PositionCutoff);
+            var eligible = CCUtils.GetEligibleDriversWithPos(season, prev, rules.PositionCutoff);
 
             foreach (Player player in gs.ParticipatingPlayers)
             {
@@ -1045,37 +1045,6 @@ public class LeagueUpdater
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static List<(Driver driver, int champPos)> GetEligibleDriversWithPos(
-        Season season, Race? prevRace, int positionCutoff)
-    {
-        if (prevRace == null)
-            return season.Drivers.Select(d => (d, 0)).ToList();
-
-        var ordered = season.Drivers
-            .Select(d => (driver: d,
-                pts: CCUtils.GetDriverChampionshipPointSnapshotForRace(season, prevRace, d)))
-            .OrderByDescending(x => x.pts)
-            .ToList();
-
-        var result = new List<(Driver, int)>();
-        for (int i = 0; i < ordered.Count; i++)
-        {
-            int pos = i + 1;
-            if (pos > positionCutoff)
-                result.Add((ordered[i].driver, pos));
-        }
-        return result;
-    }
-
-    private static float GetStandingsMultiplier(PickRules rules, int pos)
-    {
-        var ordered = rules.StandingsMultipliers.OrderBy(kv => kv.Key).ToList();
-        if (ordered.Count == 0) return 1.0f;
-        float mult = ordered[ordered.Count - 1].Value;
-        foreach (var kv in ordered)
-            if (pos <= kv.Key) { mult = kv.Value; break; }
-        return mult;
-    }
 
     private static void CenterText(string text)
     {

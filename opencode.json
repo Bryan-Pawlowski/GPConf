@@ -1,0 +1,15 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "gpconf-bot": {
+      "type": "remote",
+      "url": "http://127.0.0.1:5177/",
+      "enabled": true
+    },
+    "gpconf": {
+      "type": "local",
+      "command": ["C:\\Program Files (x86)\\GPConf\\mcp\\GPConf.McpServer.exe"],
+      "enabled": true
+    }
+  }
+}

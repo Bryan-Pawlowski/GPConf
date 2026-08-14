@@ -26,6 +26,8 @@ Three layers:
 | [ui-layer.md](ui-layer.md) | ImGui widget map, what's stub vs implemented |
 | [confidence-cup-scoring.md](confidence-cup-scoring.md) | `CCUtils` scoring rules (championship + pick scoring) |
 | [race-data-pipeline.md](race-data-pipeline.md) | The motorsport.com scraper, `RaceData/` CSVs, ingestion gap |
+| [pickem-bot-plan.md](pickem-bot-plan.md) | Discord pick'em bot design & tech plan |
+| [llm-analysis-commands.md](llm-analysis-commands.md) | Ollama-backed LLM analysis slash commands (`/driver-analysis` etc.) |
 | [log.md](log.md) | Dated chronological record of what changed and why |
 
 ## Ingest — when code changes

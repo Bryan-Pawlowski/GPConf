@@ -29,6 +29,11 @@ scraped race results.
   Discord pick'em bot extending the confidence-cup model. The `GPConf.DiscordBot/`
   scaffold (DM-only read commands) is in the working tree; the race-week
   orchestration skills and pick-submission flow are still design-only.
+- **[llm-analysis-commands.md](llm-analysis-commands.md)** — four Discord
+  slash commands (`/driver-analysis`, `/player-analysis`, `/season-overview`,
+  `/race-recap`) that generate narrative text via a local Ollama server,
+  layered on the same data — a separate mechanism from the MCP-skill-driven
+  recaps `pickem-bot-plan.md` envisions.
 - **[log.md](log.md)** — dated log of what changed in the codebase and in
   this wiki.
 

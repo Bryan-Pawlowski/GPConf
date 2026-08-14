@@ -1,18 +1,23 @@
 # Discord pick'em bot — design & tech plan
 
-> As of `4f40de8` + uncommitted scaffold (see [log.md](log.md)). The
-> `GPConf.DiscordBot/` project scaffold (DM-only read commands) is in the
-> working tree but not yet committed; the race-week orchestration skills and
-> pick-submission flow remain design-only.
+> As of `b7ade99` + uncommitted changes (see [log.md](log.md)). DM-only read
+> commands, the pick-submission widget (`/pick-submit`, `/pick-announce`),
+> LLM analysis commands, and — as of this update — the full bot-as-MCP-server
+> foundation plus all six race-week automation skill files are built and
+> working. Discord permission gating, ephemeral-everything, and pick-secrecy
+> are all live. What's left is genuinely optional polish (see "Remaining
+> build order"), not core functionality.
 
 ## Concept
 
 A Discord bot that runs the confidence-cup pick'em game (see
 [confidence-cup-scoring.md](confidence-cup-scoring.md)) as a weekly Discord
 flow instead of the desktop `LeagueUpdater` UI: players pick drivers via a
-Discord select menu, the bot enforces the deadline, and an AI agent (via
-Claude Code skills) drives the race-week sequence — posting the picker,
-DMing confirmations, ingesting results, and writing recap/preview blurbs.
+Discord select menu, and an AI agent (via Claude Code or OpenCode skills —
+both read the same `.claude/skills/*/SKILL.md` files, confirmed via
+OpenCode's own docs) drives the race-week sequence — posting the weekend
+intro, the deadline/announcement, ingesting results, locking in the reveal,
+and writing recap/preview blurbs.
 
 Origin: a draft plan was written by a different assistant with no visibility
 into this codebase (`pickem_bot.md`, not in this repo). It assumed a
@@ -64,13 +69,31 @@ below for what changed and why.
   read-only slash command. The MCP server remains the AI-agent interface; the
   bot is a parallel consumer of the same shared code.
 - **Agent drives the bot; the bot doesn't drive itself.** The Discord bot
-  process stays a thin Discord-interaction layer: posting messages/embeds,
-  handling select-menu and button interactions, enforcing the pick deadline,
-  queuing submitted picks. It exposes its own MCP tools (e.g. `post_picker`,
-  `lock_race`, `post_recap`, `dm_pick_confirmation`) that Claude Code skills
-  call to actually sequence a race week. All timing, orchestration, and
-  narrative content (the analysis/recap blurbs) live in the skills, not in
-  bot-side scheduling logic.
+  process stays a thin Discord-interaction layer for its slash commands, but
+  **also hosts its own MCP server** (`GPConf.DiscordBot/Tools/BotMcpTools.cs`,
+  registered via `.AddMcpServer().WithHttpTransport()` in `Program.cs`,
+  listening on `127.0.0.1:<CONF_MCP_HTTP_PORT, default 5177>`) in the same
+  process as the Discord gateway connection — built and working, not just
+  planned. This is deliberately **HTTP transport, not stdio**: stdio (what
+  `GPConf.McpServer` uses) spawns a new server process per client and can't
+  reach an already-running bot, which is the whole point here — skills need
+  to make the *live*, already-connected bot post. Tools: `post_message`,
+  `post_pick_deadline_reminder`, `post_pick_announcement`, `post_pick_reveal`,
+  `post_race_results`, `post_standings`, `generate_and_post`. Every tool
+  reuses the exact embed-builder methods the slash commands use
+  (`ReadCommands`/`PickCommands` expose them as `internal static` — see e.g.
+  `BuildResultsEmbed`, `BuildPickEmbed`, `BuildPickAnnouncement`) — nothing is
+  reimplemented for the automation path. All timing, orchestration, and
+  narrative content (the analysis/recap blurbs) live in the skills
+  (`.claude/skills/*/SKILL.md`), not in bot-side scheduling logic — the bot
+  itself has no concept of a race week, a deadline, or a skill.
+  One design rule worth calling out: `generate_and_post` should fire **once
+  per genuinely new piece of narrative content**. A step that needs to
+  *display* content already generated (by an earlier `generate_and_post`
+  call, or composed by the skill/agent itself) should format it as markdown
+  and post it with the plain `post_message` tool instead — never feed
+  already-generated text back through the LLM for a second pass. See
+  `race-end/SKILL.md` step 3 for the concrete case this came from.
 - **Never hardcode eligibility or scoring bot-side.** Any bot feature that
   depends on a GPConf-computed value (eligibility, pick score, standings,
   lock state) must call an MCP tool and use its output directly. If a needed
@@ -167,36 +190,60 @@ viewer's own timezone — the skill only needs to compute one Unix epoch from
 whatever timezone the admin gives the Qualifying/Sprint Qualifying start
 time in; no per-viewer timezone handling needed.
 
-## Planned race-week skill set
+> **Note (2026-08-13):** the narrative-content steps below (4, 6, 7) describe
+> an MCP-skill-driven agent authoring the text itself while orchestrating
+> race week. A separate, parallel mechanism now exists —
+> [llm-analysis-commands.md](llm-analysis-commands.md)'s four Discord slash
+> commands (`/driver-analysis`, `/player-analysis`, `/season-overview`,
+> `/race-recap`), which call a local Ollama server directly and
+> synchronously from the bot process, no agent orchestration involved. This
+> plan's skill-driven recaps are not superseded by that — they're two
+> different mechanisms that happen to produce conceptually similar content.
 
-In sequence for a normal race week:
+## Race-week skill set (built)
 
-1. **Prep Next Race Week** — admin gives the Qualifying/Sprint Qualifying
-   start time; skill posts the `<t:EPOCH:F> (<t:EPOCH:R>)` announcement,
-   calls `post_picker` (driver options show the live per-slot multiplier,
-   colorized/bold, sourced from MCP — never hardcoded), and once a player
-   confirms via button the pick is queued, processed, and the bot DMs a
-   formatted widget (picks, multipliers, potential score, total). The
-   deadline for `lock_race` is the same epoch as the announcement.
-2. **Input Practice Results** — admin gives a URL; bridges through the
-   scraper into `SetPracticeResults`.
-3. **Input Qualifying Results** — same, into `SetQualifyingResults`,
-   distinguishing Sprint Qualifying from regular Qualifying (blocked on the
-   bug above).
-4. **Pre-race analysis blurb** — once picks are locked, agent writes a short
-   piece on noteworthy eligible-driver storylines (past qualifying form,
-   practice→qualifying→race trends, DNF history, current F1 news via web
-   search). Must **not** expose player picks — analysis only.
-5. **Input Race Results** — sprint (if applicable) and feature race, into
-   `SetRaceResults`, distinct session names/`isComplete`/`pointsRulesName`
-   per session.
-6. **Post-race recap** — once results are in and scores tally, bot posts
-   race results, confidence-cup results, championship standings, and next
-   race's driver eligibilities (all via MCP, per the never-hardcode rule
-   above). Agent writes a kind-but-tongue-in-cheek recap of noteworthy
-   league performances, closing with a short preview of the next race.
-7. **End-of-season recap** — special case of (6) when the completed race is
-   the season finale. Content/format not yet designed.
+Six `SKILL.md` files under `.claude/skills/`, discoverable by both Claude
+Code and OpenCode (OpenCode reads `.claude/skills/*/SKILL.md` natively as a
+compatibility path — confirmed via its own docs, no duplication needed).
+Supersedes the original 7-step sketch below; kept for historical context on
+what changed and why.
+
+1. **`practice-data-entry`**, **`qualifying-data-entry`**,
+   **`race-data-entry`** — each takes a motorsport.com session URL, shells
+   out to `Python/f1_results_to_csv.py` (never reimplements the scrape),
+   upserts any missing manufacturer/team/driver first (in that dependency
+   order — `RaceTools`' name resolution fails *silently* to an empty ID on a
+   mismatch), converts the scraper's raw lap count to GPConf's "laps behind
+   the leader" `LapsCompleted` convention, and calls the matching
+   `RaceTools` MCP tool. `qualifying-data-entry` also computes the combined
+   starting grid order across Q1/Q2/Q3 eliminations.
+2. **`race-weekend-prep`** — web-searches the real Qualifying/Sprint
+   Qualifying start time for the deadline epoch, researches track
+   history/recent news for an AI-written intro (one `generate_and_post`
+   call, framed explicitly as speculation where it speculates), posts the
+   deadline+scoring-rules reminder and the `@here` picks-open announcement,
+   then registers a one-shot Windows Task Scheduler job
+   (`pick-lockin/schedule-pick-lockin.ps1`) to fire `pick-lockin`
+   automatically at the deadline — neither Claude Code's nor OpenCode's
+   skill system has any scheduling primitive of its own, confirmed via
+   research, so this has to live outside both.
+3. **`pick-lockin`** — fires at the deadline (scheduled, or run manually);
+   posts the unconditional, ranked-by-potential-score picks reveal via
+   `post_pick_reveal`. No call-to-action here — that already happened in
+   `race-weekend-prep`.
+4. **`race-end`** — posts results/pick-reveal/driver standings/confidence-cup
+   standings (four thin tool calls, no generation), one `generate_and_post`
+   call for a researched post-race analysis, then an **agent-composed**
+   confidence-cup blurb + next-race preview posted via plain `post_message`
+   (deliberately *not* a second `generate_and_post` call — see the
+   "one design rule" note above). On the season finale (this race's round
+   equals the season's highest scheduled round) it also runs a richer
+   `generate_and_post` covering the champion, their season arc, challengers,
+   and ~5 tongue-in-cheek/data-nerdy awards computed from real per-player
+   season stats.
+
+Every skill posts non-ephemeral — they're announcements/calls-to-action for
+the whole league, not private replies.
 
 ## Discord bot setup
 
@@ -209,26 +256,65 @@ Before any bot code can run, one-time setup:
 
 Then the bot appears in the server and slash commands become functional.
 
+**For skills to reach the bot's MCP server** (see the bot-as-MCP-server bullet
+above), the running Claude Code / OpenCode client also needs an MCP client
+entry pointing at `http://127.0.0.1:<CONF_MCP_HTTP_PORT, default 5177>/`,
+alongside the existing `gpconf` (desktop-data) server. On this machine:
+Claude Code's project entry lives in `~/.claude.json` under
+`projects["<repo path>"].mcpServers.gpconf-bot` (`{"type": "http", "url":
+"http://127.0.0.1:5177/"}`); OpenCode reads a project-local `opencode.json`
+at the repo root (`{"mcp": {"gpconf-bot": {"type": "remote", "url": "..."}}}`
+— OpenCode's schema uses `"remote"`/`"local"` instead of Claude Code's
+`"http"`/`"stdio"`). Both are already set up in this repo/machine. The bot
+process has to actually be running for either to connect — it's not
+autostarted by either client.
+
 ## Remaining build order
 
-1. Discord bot setup (Developer Portal → token → invite URL).
-2. Persistence hardening (backups + concurrency guard).
-3. External `discord_links.json` mapping + a read-only "list league players"
-   MCP tool to seed/review it.
-4. League/Player MCP write tools (create league, add/remove player).
+1. ~~Discord bot setup~~ **done** — bot is live in the target guild, token
+   via `CONF_BOT_TOKEN`.
+2. ~~Persistence hardening~~ **done** — rotating backups + optimistic
+   version check in both `GpConfApp.Save` and `GpConfDataAccess.Save`.
+3. **Not done, and no longer blocking**: the external `discord_links.json`
+   Player↔Discord-user mapping was superseded by a simpler design —
+   `DataService.SubmitPicks` matches/auto-registers players by Discord
+   display name directly (case-insensitive), no separate link file. Revisit
+   only if display-name collisions become a real problem.
+4. **Not done**: League/Player MCP *write* tools (create league, add/remove
+   player) — today, league creation/roster edits still go through the
+   desktop UI; the bot only auto-registers new players via pick submission.
 5. ~~Discord bot project scaffold with DM-only slash commands~~ **done** —
-   `GPConf.DiscordBot/` builds with `/standings`, `/results`, `/quali`,
-   `/practice`, `/scores`, `/pick`, `/rules` (DM-only, reads shared
-   `GpConfDataAccess`/`CCUtils` directly). Needs a real token to run.
-6. ~~Fix `SetQualifyingResults` session clobbering~~ **done** (`1106481`) —
-   find-or-replace by `(SessionName, Stage)`.
-7. CSV-to-MCP results bridge (shared by the three ingestion skills).
-8. Pick-submission MCP tool, with `GetEligibleDriversWithPos` ported to a
-   shared, MCP-exposed implementation (not duplicated bot-side).
-9. Pick-window locking (deadline-driven, from the Prep skill's epoch).
-10. Leaderboard/round-summary formatting.
-11. The seven race-week orchestration skills (prep, practice input, qualifying
-    input, pre-race analysis, race results input, post-race recap, end-of-season).
+   `/standings`, `/results`, `/quali`, `/practice`, `/scores`, `/pick`,
+   `/rules`, all ephemeral, `/pick` gated to keep other players' picks
+   secret for the currently-open race only.
+6. ~~Fix `SetQualifyingResults` session clobbering~~ **done** (`1106481`).
+7. ~~CSV-to-MCP results bridge~~ **done** — as three skills
+   (`practice-data-entry`, `qualifying-data-entry`, `race-data-entry`)
+   rather than a standalone script, since the bridging logic needs
+   judgment calls (grid-order computation, DNF/DNS/DSQ text classification)
+   an agent handles better than a rigid parser.
+8. ~~Pick-submission~~ **done**, but via a different mechanism than
+   originally sketched — not an MCP tool, but the bot-native
+   `/pick-submit`/`/pick-announce` slash-command flow (5 select-menu
+   dropdowns + explicit "Lock In Picks" button), with
+   `CCUtils.GetEligibleDriversWithPos` as the shared, never-duplicated
+   eligibility source both the desktop app and bot call into.
+9. **Design changed, not "locked" the way originally planned**: there's no
+   explicit deadline-enforced lock state in the data model. The pick window
+   closes implicitly — `DataService.NextPickableRace` only ever targets the
+   earliest race with no recorded results, so picking after a race is
+   decided is structurally impossible. The *announced* deadline
+   (`race-weekend-prep`'s epoch) is a social/scheduling deadline enforced by
+   the `pick-lockin` skill firing the reveal, not a hard cutoff the bot
+   rejects late submissions against.
+10. ~~Leaderboard/round-summary formatting~~ **done** — `/scores`, `/pick`,
+    and the `post_pick_reveal`/`post_standings` MCP tools all render ranked
+    tables.
+11. ~~The race-week orchestration skills~~ **done** — six skills under
+    `.claude/skills/`, see "Race-week skill set (built)" above. Superseded
+    the original 7-step sketch (merged pre-race-analysis into `race-end`'s
+    post-race analysis rather than a separate pre-race skill, and added a
+    season-finale branch instead of a placeholder).
 
 ## See also
 

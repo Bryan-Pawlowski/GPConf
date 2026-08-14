@@ -25,6 +25,7 @@
 
     <ItemGroup>
         <Compile Include="..\Src\Utilities\ConfCupUtils.cs" Link="Utilities\ConfCupUtils.cs" />
+        <Compile Include="..\Src\Utilities\BackupUtils.cs" Link="Utilities\BackupUtils.cs" />
     </ItemGroup>
 
 

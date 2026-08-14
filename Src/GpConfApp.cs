@@ -109,6 +109,7 @@ public class GpConfApp
     {
         // Suppress the watcher so our own save doesn't trigger a reload.
         _watcher.EnableRaisingEvents = false;
+        BackupUtils.RotateBackups(AppPath);
         using FileStream file = File.Create(AppPath); // Create truncates; OpenWrite does not.
         _mainAppData.WriteTo(file);
         _watcher.EnableRaisingEvents = true;

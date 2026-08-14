@@ -189,18 +189,17 @@ public class QueryTools(GpConfDataAccess data)
 
             if (picks is not null)
             {
+                bool hasResults = r.RaceResults.Any(rr => rr.IsComplete);
                 for (int i = 0; i < picks.DriverId.Count; i++)
                 {
                     var   dId    = picks.DriverId[i];
                     int   pos    = champPos.GetValueOrDefault(dId, 0);
-                    float score  = r.RaceResults.Any(rr => rr.IsComplete)
-                        ? CCUtils.GetPickScoreFromResults(s, rules, i, dId, r, pos)
-                        : CCUtils.CalculatePickScore(rules, i, pos);
+                    float score  = CCUtils.ScorePickSlot(s, rules, i, dId, r, pos, hasResults);
                     total += score;
                     pickDetails.Add(new
                     {
                         pickNumber       = i + 1,
-                        driver           = driverMap.GetValueOrDefault(dId, "(unknown)"),
+                        driver           = dId.IsEmpty ? "(no pick)" : driverMap.GetValueOrDefault(dId, "(unknown)"),
                         champPositionPre = pos > 0 ? (int?)pos : null,
                         score,
                     });
@@ -327,6 +326,7 @@ public class QueryTools(GpConfDataAccess data)
                 var champPts = prevRace is not null ? ComputeChampionshipPoints(season, prevRace) : [];
                 var champPos = BuildChampionshipPositions(champPts);
 
+                bool hasResults = race.RaceResults.Any(rr => rr.IsComplete);
                 foreach (var player in gs.ParticipatingPlayers)
                 {
                     var picks = gameRace.PicksPerPlayer.FirstOrDefault(pp => pp.PlayerId == player.Id);
@@ -336,9 +336,7 @@ public class QueryTools(GpConfDataAccess data)
                     {
                         var   dId   = picks.DriverId[i];
                         int   pos   = champPos.GetValueOrDefault(dId, 0);
-                        float score = race.RaceResults.Any(rr => rr.IsComplete)
-                            ? CCUtils.GetPickScoreFromResults(season, rules, i, dId, race, pos)
-                            : CCUtils.CalculatePickScore(rules, i, pos);
+                        float score = CCUtils.ScorePickSlot(season, rules, i, dId, race, pos, hasResults);
                         playerScores[player.Id] = playerScores.GetValueOrDefault(player.Id) + score;
                     }
                 }

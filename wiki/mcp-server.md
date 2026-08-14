@@ -9,6 +9,14 @@ file the desktop app uses — see the concurrency caveats in
 [architecture.md](architecture.md) before assuming writes from here and from
 the app can safely interleave.
 
+There is a **second, separate MCP server**: `GPConf.DiscordBot` hosts its own
+MCP tool surface over HTTP (`BotMcpTools.cs`), not stdio — deliberately
+different transport, since stdio spawns a server-per-client and can't reach
+an already-running Discord bot. It exposes Discord-posting tools
+(`post_message`, `generate_and_post`, etc.), not `gpconf.data` access. See
+[pickem-bot-plan.md](pickem-bot-plan.md) for that server's design and tool
+inventory — this page covers `GPConf.McpServer` only.
+
 ## Data access — `DataAccess/GpConfDataAccess.cs`
 
 - `DataPath` = `%APPDATA%/GPConf/gpconf.data`.

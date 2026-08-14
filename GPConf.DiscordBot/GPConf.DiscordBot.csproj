@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
@@ -11,6 +11,7 @@
     <ItemGroup>
         <PackageReference Include="Discord.Net" Version="3.20.1" />
         <PackageReference Include="ModelContextProtocol" Version="1.1.0" />
+        <PackageReference Include="ModelContextProtocol.AspNetCore" Version="1.1.0" />
         <PackageReference Include="Google.Protobuf" Version="3.34.0" />
         <PackageReference Include="Grpc.Tools" Version="2.78.0">
             <PrivateAssets>all</PrivateAssets>
@@ -25,6 +26,8 @@
 
     <ItemGroup>
         <Compile Include="..\Src\Utilities\ConfCupUtils.cs" Link="Utilities\ConfCupUtils.cs" />
+        <Compile Include="..\Src\Utilities\ColorUtils.cs" Link="Utilities\ColorUtils.cs" />
+        <Compile Include="..\Src\Utilities\BackupUtils.cs" Link="Utilities\BackupUtils.cs" />
     </ItemGroup>
 
     <ItemGroup>

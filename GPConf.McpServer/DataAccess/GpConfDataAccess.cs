@@ -1,4 +1,5 @@
 using Google.Protobuf;
+using GPConf.Utilities;
 
 namespace GPConf.McpServer.DataAccess;
 
@@ -15,8 +16,32 @@ public class GpConfDataAccess
         return MainData.Parser.ParseFrom(fs);
     }
 
-    public void Save(MainData data)
+    // Pairs a load with a version marker (the file's mtime at load time) so a later Save can
+    // detect whether another process wrote to gpconf.data in between — see Save(data, expectedVersion).
+    public (MainData data, DateTime version) LoadWithVersion()
     {
+        var data = Load();
+        var version = File.Exists(DataPath) ? File.GetLastWriteTimeUtc(DataPath) : DateTime.MinValue;
+        return (data, version);
+    }
+
+    public void Save(MainData data) => Save(data, null);
+
+    // expectedVersion, if given, must match gpconf.data's current mtime or the save is refused —
+    // an optimistic-concurrency guard against another process (a concurrent MCP server instance,
+    // the desktop app, or the bot) having written the file since it was loaded. Optional so every
+    // pre-existing caller (Save(data), no version) keeps its prior unconditional-overwrite behavior;
+    // only writers that can't tolerate silently clobbering a concurrent write should pass one.
+    public void Save(MainData data, DateTime? expectedVersion)
+    {
+        if (expectedVersion is { } expected)
+        {
+            var current = File.Exists(DataPath) ? File.GetLastWriteTimeUtc(DataPath) : DateTime.MinValue;
+            if (current != expected)
+                throw new ConcurrentSaveException(
+                    "gpconf.data was modified by another process since it was loaded; refusing to overwrite.");
+        }
+
         // Keep CurrentSeason in sync with the matching entry in data.Seasons so that
         // the app's Migrate() step (which replaces the list entry with CurrentSeason)
         // does not overwrite MCP-written changes with stale data.
@@ -30,6 +55,7 @@ public class GpConfDataAccess
         }
 
         Directory.CreateDirectory(Path.GetDirectoryName(DataPath)!);
+        BackupUtils.RotateBackups(DataPath);
         using var fs = new FileStream(DataPath, FileMode.Create, FileAccess.Write);
         data.WriteTo(fs);
     }
@@ -67,3 +93,5 @@ public class GpConfDataAccess
     public static ByteString NewId() =>
         ByteString.CopyFrom(Guid.NewGuid().ToByteArray());
 }
+
+public sealed class ConcurrentSaveException(string message) : Exception(message);
