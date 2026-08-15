@@ -153,6 +153,70 @@ public class QueryTools(GpConfDataAccess data)
         return JsonSerializer.Serialize(standings, new JsonSerializerOptions { WriteIndented = true });
     }
 
+    // ── Pick Eligibility ──────────────────────────────────────────────────────
+
+    [McpServerTool]
+    [Description("Returns the confidence-cup pick rules and the eligible driver pool for the upcoming (not-yet-decided) race in a season. Drivers ranked P1..PositionCutoff in the championship through the previous race are NOT pickable and are excluded from the eligible list; each eligible driver carries their standings multiplier. If leagueName is omitted, the first league linked to the season is used.")]
+    public string GetPickEligibility(
+        [Description("Season name or year")] string season,
+        [Description("League name (optional)")] string? leagueName = null)
+    {
+        var mainData = data.Load();
+        var s = GpConfDataAccess.FindSeason(mainData, season);
+        if (s is null) return $"Season '{season}' not found.";
+
+        var (league, gs, err) = FindLeagueAndGameSeason(mainData, s, leagueName);
+        if (err is not null) return err;
+
+        var rules = gs!.PickRules ?? new PickRules();
+
+        // The next race with no recorded results is the one players are picking for.
+        var target = s.Races
+            .OrderBy(r => r.Round)
+            .FirstOrDefault(r => r.RaceResults.All(rr => !rr.IsComplete));
+        if (target is null) return $"No upcoming (undecided) race found for season '{s.Name}' — every race has complete results.";
+
+        var prevRace = s.Races.OrderBy(r => r.Round).LastOrDefault(r => r.Round < target.Round);
+        var noPriorRace = prevRace is null;
+        var eligiblePairs = CCUtils.GetEligibleDriversWithPos(s, prevRace, rules.PositionCutoff);
+
+        var champPts = prevRace is not null ? ComputeChampionshipPoints(s, prevRace) : [];
+        var champPos = BuildChampionshipPositions(champPts);
+
+        // Ineligible (cutoff) drivers, for the caller's awareness — not recommended as picks.
+        var ineligible = s.Drivers
+            .Where(d => champPos.TryGetValue(d.Id, out var pos) && pos <= rules.PositionCutoff)
+            .OrderBy(d => champPos[d.Id])
+            .Select(d => new { driver = d.Name, champPosition = champPos[d.Id] })
+            .ToList();
+
+        var eligible = eligiblePairs
+            .Select(x => new
+            {
+                driver = x.driver.Name,
+                champPosition = x.champPos,
+                multiplier = noPriorRace || x.champPos == 0
+                    ? 1.0f
+                    : CCUtils.GetStandingsMultiplier(rules, x.champPos),
+            })
+            .OrderBy(x => x.champPosition)
+            .ToList();
+
+        return JsonSerializer.Serialize(new
+        {
+            league = league!.LeagueName,
+            upcomingRace = target.Name,
+            numPicks = rules.NumPicks,
+            positionCutoff = rules.PositionCutoff,
+            basePickScores = rules.BasePickScores,
+            standingsMultipliers = rules.StandingsMultipliers
+                .OrderBy(kv => kv.Key)
+                .Select(kv => new { fromPosition = kv.Key, multiplier = kv.Value }),
+            ineligibleDrivers = ineligible,
+            eligibleDrivers = eligible,
+        }, new JsonSerializerOptions { WriteIndented = true });
+    }
+
     // ── Player Picks ──────────────────────────────────────────────────────────
 
     [McpServerTool]

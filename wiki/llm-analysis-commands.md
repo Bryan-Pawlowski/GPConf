@@ -2,8 +2,9 @@
 
 > As of `56009f3` + uncommitted (2026-08-14).
 
-Four Discord slash commands in `GPConf.DiscordBot` generate narrative text
-via a locally-hosted Ollama server, layered on top of the same
+The Discord slash commands in `GPConf.DiscordBot` that take structured input
+(season/driver/player/team/race/league) generate narrative text via a
+locally-hosted Ollama server, layered on top of the same
 `DataService`/`CCUtils` data every other bot command uses. This is a
 separate, parallel mechanism from the MCP-skill-driven agent-authored
 recaps described in [pickem-bot-plan.md](pickem-bot-plan.md)'s planned
@@ -12,6 +13,39 @@ plan's recaps are written by a Claude Code skill orchestrating race week
 through MCP tool calls; these commands are synchronous, on-demand Discord
 slash commands that call a local model directly from the bot process, no
 agent orchestration involved.
+
+## Convention: commands that need input use a wizard, not slash args
+
+**Any bot command that needs structured input (season, driver, player, team,
+race, league) must be a parameterless slash command that opens an ephemeral
+dropdown wizard — never a command that takes those values as slash-command
+arguments.** This is a hard convention for the GPConf bot. Reasons:
+
+- The caller never has to know exact season/driver/player/team/race/league
+  spelling — they pick from real, populated dropdowns.
+- The wizard auto-resolves the league when the season has exactly one, so
+  the common case needs no league input at all.
+- It keeps the command surface uniform and avoids the "not found" error
+  path that typed-arg commands hit on every typo.
+
+This applies to **every** command that takes structured input, including the
+DM-only read commands (`/standings`, `/results`, `/quali`, `/practice`,
+`/pick`, `/rules`) — they are parameterless wizards too, not typed-arg
+commands. The read-command wizard is a **separate, simpler module** from the
+analysis wizard below: it reuses `AnalysisSessionStore` for the token/TTL/
+CallerId machinery and the shared dropdown builders, but its result renders
+**ephemeral in the DM** (a one-shot lookup — no public post, no
+regeneration-keep). The analysis wizard posts public persistent messages and
+keeps the session for regeneration.
+
+The wizard infrastructure lives in `AnalysisCommands.cs` and is shared by
+both the LLM commands and the deterministic stat commands below. The
+deterministic commands (`/season-stats`, `/leaderboard`, `/projected`) build
+their embed directly in the Generate handler (no Ollama call); the LLM
+commands go through `GenerateEmbedAsync`. The **comparison** commands
+(`/compare`, `/h2h`, `/team-analysis`) are hybrid: they post a prettier
+static embed of the raw stats **and** an Ollama-generated narrative analysis
+highlighting noteworthy differences and key performance indicators.
 
 ## Hard rule: the model never computes or invents a fact
 
@@ -30,6 +64,8 @@ field a model would misread into a false "retired after N laps" claim.
 
 ## Commands
 
+### LLM (Ollama-backed)
+
 | Command | Params | Facts builder |
 |---|---|---|
 | `/driver-analysis` | none — dropdown wizard | `AnalysisFacts.BuildDriverFacts` |
@@ -37,10 +73,29 @@ field a model would misread into a false "retired after N laps" claim.
 | `/season-overview` | none — dropdown wizard | `AnalysisFacts.BuildSeasonFacts` |
 | `/race-recap` | none — dropdown wizard | `AnalysisFacts.BuildRaceRecapFacts` |
 
-All four commands are parameterless and open an ephemeral dropdown wizard
-(see below). The generated analysis is posted as a **separate, public,
-persistent channel message** — only the wizard itself stays ephemeral, so
-the result survives bot restarts and isn't replaced by the widget.
+### Comparison (static embed + Ollama analysis)
+
+| Command | Params | Static embed | AI analysis |
+|---|---|---|---|
+| `/team-analysis` | none — dropdown wizard | `ReadCommands.BuildTeamCompareEmbed` | `AnalysisFacts.BuildTeamCompareFacts` |
+| `/compare` | none — dropdown wizard | `ReadCommands.BuildCompareEmbed` | `AnalysisFacts.BuildCompareFacts` |
+| `/h2h` | none — dropdown wizard | `ReadCommands.BuildH2HEmbed` | `AnalysisFacts.BuildH2HFacts` |
+
+### Deterministic (no Ollama)
+
+| Command | Params | Facts builder / embed |
+|---|---|---|
+| `/season-stats` | none — dropdown wizard | `AnalysisFacts.BuildSeasonStatsFacts` → `ReadCommands.BuildSeasonStatsEmbed` |
+| `/leaderboard` | none — dropdown wizard | `ReadCommands.BuildLeaderboardEmbed` |
+| `/projected` | none — dropdown wizard | `AnalysisFacts.BuildProjectedFacts` → `ReadCommands.BuildProjectedEmbed` |
+
+All commands are parameterless and open an ephemeral dropdown wizard (see
+below). The generated analysis is posted as a **separate, public, persistent
+channel message** — only the wizard itself stays ephemeral, so the result
+survives bot restarts and isn't replaced by the widget. The deterministic
+commands follow the same wizard + public-persistent-post pattern; only the
+embed construction differs (direct, no Ollama call). The comparison commands
+post **two** messages: the static stats embed, then the AI analysis embed.
 
 ### The dropdown wizard
 
@@ -49,10 +104,11 @@ by `AnalysisSessionStore` (`GPConf.DiscordBot/Services/DriverAnalysisSessionStor
 mirrors `PickSessionStore`'s shape/TTL: an opaque 8-byte hex token embedded
 in every component's `CustomId`, since three raw GUIDs plus a command prefix
 would blow past Discord's 100-char `CustomId` limit). A session records its
-`Kind` (`Driver`/`Player`/`Season`/`Recap`) plus the optional `DriverId`,
-`LeagueId`, `PlayerName`, and `RaceId` selections, and `CallerId` binds it to
-whoever ran the command — every handler rejects interactions from any other
-user id.
+`Kind` (`Driver`/`Player`/`Season`/`Recap`/`Team`/`SeasonStats`/`Leaderboard`/
+`Compare`/`H2H`/`Projected`) plus the optional `DriverId`, `Driver2Id`,
+`LeagueId`, `PlayerName`, `Player2Name`, `RaceId`, `TeamId`, and `Team2Id`
+selections, and `CallerId` binds it to whoever ran the command — every
+handler rejects interactions from any other user id.
 
 The dropdown sequence depends on the kind:
 
@@ -61,6 +117,25 @@ The dropdown sequence depends on the kind:
   from `GameSeason.ParticipatingPlayers`)
 - **Season:** season → league → race
 - **Recap:** season → race → league
+- **Team:** season → team → team (second) → league
+- **SeasonStats:** season → league → race
+- **Leaderboard:** season → league → race
+- **Compare:** season → driver → driver (second) → race
+- **H2H:** season → league → player → player (second) → race
+- **Projected:** season → league
+
+The **read-command wizard** (`ReadCommands.cs`, `read_*` component ids) uses
+the same season/race/league dropdown builders but a simpler sequence:
+
+- **Rules:** season
+- **Quali:** season → race
+- **Practice:** season → race → session (FP1/FP2/FP3)
+- **Standings / Results / Pick:** season → race → league
+
+The league dropdown only appears when the season has more than one configured
+league (0 or 1 auto-resolve silently), the same convention as the analysis
+wizard. `/pick` preserves its secrecy gate (other players' picks hidden until
+the race has results).
 
 Flow:
 
@@ -85,7 +160,10 @@ Flow:
    persistent), then `ModifyOriginalResponseAsync` re-enables the button and
    restores the prompt — the session is intentionally **kept** so the caller
    can tweak the dropdowns and regenerate. On an Ollama error the button is
-   re-enabled and the error shown in the wizard.
+   re-enabled and the error shown in the wizard. The deterministic kinds
+   (`SeasonStats`/`Leaderboard`/`Compare`/`H2H`/`Projected`) set `embed`
+   directly in the switch and skip the Ollama call entirely — the same
+   ack/disable/post/re-enable flow still runs.
 
 Every re-render (`BuildAnalysisComponents`) rebuilds the menus from the
 session's current state and marks the already-chosen option as `isDefault`
@@ -152,6 +230,35 @@ what each builder includes:
   position threshold), DNF/DNS/DSQ list, fastest lap; if a league resolved,
   adds this week's per-player scores, cumulative standings movement vs. the
   previous race, and the most-picked driver that week.
+- **Team compare** (`BuildTeamCompareFacts`, comparison): two teams'
+  constructor points + best driver position, season aggregates (wins/podiums/
+  DNFs, both-scored count, avg finish), per-driver championship positions,
+  and — when a league resolved — each driver's pick eligibility + standings
+  multiplier for the next race.
+- **Season stats** (`BuildSeasonStatsFacts`, deterministic): driver
+  reliability (fewest DNFs/DNS), lowest qualifying SD (most consistent),
+  longest winless streak, average quali→race position change; if a league
+  resolved, adds pick-perfect races, missed opportunities (scoreable driver
+  nobody picked), zero-score weeks, and the most-picked driver per race.
+- **Compare** (`BuildCompareFacts`, comparison): two drivers' championship
+  positions, head-to-head win count across shared races, reliability
+  (DNF/DSQ + average finish), average qualifying position **plus** a quali
+  head-to-head count, and pace analysis — average fastest-lap and race-time
+  gaps (race pace) and average practice fastest-lap gap (practice pace). The
+  AI analysis is prompted to discuss practice, qualifying, and race pace and
+  how the pace differences factor into their results.
+- **H2H** (`BuildH2HFacts`, comparison): two players' cumulative scores,
+  head-to-head outscore count, no-pick counts, scoring consistency (avg/best
+  per race), shared picks, and each player's unique picks.
+- **Projected** (`BuildProjectedFacts`, deterministic): the next pickable
+  race's best-case picks (highest-multiplier eligible drivers) and the
+  projected standings if every player picks optimally.
+
+The comparison facts builders emit markdown with `**Header**` section lines;
+`ReadCommands.ParseFactsFields` splits those into titled embed fields so the
+static embed renders as clean sections rather than a code fence. The AI
+analysis for these commands is prompted to highlight noteworthy differences
+and key performance indicators between the two subjects.
 
 Qualifying "grid position" is derived identically everywhere (a shared
 `QualifyingOrder` helper in `AnalysisFacts.cs`) using the same ordering

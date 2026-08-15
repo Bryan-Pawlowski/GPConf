@@ -1,6 +1,6 @@
 # Discord pick'em bot — design & tech plan
 
-> As of `b7ade99` + uncommitted changes (see [log.md](log.md)). DM-only read
+> As of `2bfdba6` + uncommitted changes (see [log.md](log.md)). DM-only read
 > commands, the pick-submission widget (`/pick-submit`, `/pick-announce`),
 > LLM analysis commands, and — as of this update — the full bot-as-MCP-server
 > foundation plus all seven race-week automation skill files are built and
@@ -79,8 +79,8 @@ below for what changed and why.
   reach an already-running bot, which is the whole point here — skills need
   to make the *live*, already-connected bot post. Tools: `post_message`,
   `post_pick_deadline_reminder`, `post_pick_announcement`, `post_pick_reveal`,
-  `post_race_results`, `post_standings`, `generate_and_post`,
-  `close_pick_announcement`. Every tool
+  `post_race_results`, `post_standings`, `post_leaderboard`,
+  `generate_and_post`, `close_pick_announcement`. Every tool
   reuses the exact embed-builder methods the slash commands use
   (`ReadCommands`/`PickCommands` expose them as `internal static` — see e.g.
   `BuildResultsEmbed`, `BuildPickEmbed`, `BuildPickAnnouncement`) — nothing is
@@ -157,25 +157,26 @@ sessions.
 ## DM-only read commands
 
 The bot responds **only to slash commands in DMs** — never in channels, never to
-plain text. It is not a chat bot. Each command maps to an existing MCP tool
-(or will once implemented) and returns a formatted embed.
+plain text. It is not a chat bot. Each command returns a formatted embed.
 
-| Command | Maps to MCP tool | Output |
-|---|---|---|
-| `/standings` | `GetChampionshipStandings` | Championship points table (driver, team, nationality, points) |
-| `/results <race>` | `GetRaceResults` | Race results table for the given race (name or round) |
-| `/quali <race>` | `GetQualifyingResults` | Qualifying grid results |
-| `/practice <race>` | `GetPracticeResults` | Practice session results |
-| `/scores` | `GetPlayerScores` | Cumulative player confidence-cup scores |
-| `/pick <player>` | `GetPlayerPicks` | A specific player's picks + computed scores per race |
-| `/rules` | `GetSeason` | Current season's points rules and confidence-cup multiplier table |
+| Command | Output |
+|---|---|
+| `/standings` | Championship points table (driver, team, nationality, points) |
+| `/results` | Race results table for the given race |
+| `/quali` | Qualifying grid results |
+| `/practice` | Practice session results |
+| `/pick` | A player's picks + computed scores per race |
+| `/rules` | Current season's points rules and confidence-cup multiplier table |
 
-These are static, synchronous replies (command → MCP tool → embed). No state,
-no ephemeral messages, no select menus, no button interactions. The existing
-`QueryTools` tools already cover 5 of 7 commands; the remaining two
-(`/pick` needs the already-planned player MCP tools + pick lookup) come from
-existing `QueryTools.GetPlayerPicks` once the player-pick data pipeline is wired
-in.
+These are **parameterless dropdown wizards** (per the "any command needing
+structured input uses a wizard" convention in
+[llm-analysis-commands.md](llm-analysis-commands.md)): the caller picks
+season/race/league from real dropdowns rather than typing them, and the result
+renders **ephemeral in the DM** (a one-shot lookup — no public post, no
+regeneration-keep, unlike the analysis wizard). The wizard reuses
+`AnalysisSessionStore` for token/TTL/CallerId machinery and the shared dropdown
+builders from `AnalysisCommands`. `/scores` was removed — `/leaderboard` is a
+strict superset (ranked player scores with momentum indicators).
 
 **No new MCP tools required for the common commands** — the existing read-only
 `QueryTools` inventory maps directly. If a future command needs a computation
@@ -227,7 +228,14 @@ what changed and why.
    `pick-reminder` 15 minutes before the deadline and `pick-lockin` at the
    deadline — neither Claude Code's nor OpenCode's
    skill system has any scheduling primitive of its own, confirmed via
-   research, so this has to live outside both.
+   research, so this has to live outside both. The intro's research step also
+   builds a **confidence-cup picks analysis**: it pulls the weekend's
+   practice/qualifying data and the previous race's results + championship
+   standings from the `gpconf` MCP server, web-searches for similar tracks
+   and driver pace at them, and weighs the confidence-cup scoring mechanics
+   (see [confidence-cup-scoring.md](confidence-cup-scoring.md)) to flag
+   strong/weak and value picks for this track — surfaced as a dedicated
+   `🎯 Confidence Cup Picks` section in the intro.
 2b. **`pick-reminder`** — fires 15 minutes before the deadline (scheduled
    via `pick-reminder/schedule-pick-reminder.ps1`, or run manually). Compares
    `get_player_picks` against the full participating roster to find who still
@@ -293,9 +301,10 @@ autostarted by either client.
    player) — today, league creation/roster edits still go through the
    desktop UI; the bot only auto-registers new players via pick submission.
 5. ~~Discord bot project scaffold with DM-only slash commands~~ **done** —
-   `/standings`, `/results`, `/quali`, `/practice`, `/scores`, `/pick`,
+   `/standings`, `/results`, `/quali`, `/practice`, `/pick`,
    `/rules`, all ephemeral, `/pick` gated to keep other players' picks
-   secret for the currently-open race only.
+   secret for the currently-open race only. `/scores` was later removed
+   (superseded by `/leaderboard`).
 6. ~~Fix `SetQualifyingResults` session clobbering~~ **done** (`1106481`).
 7. ~~CSV-to-MCP results bridge~~ **done** — as three skills
    (`practice-data-entry`, `qualifying-data-entry`, `race-data-entry`)
@@ -319,9 +328,9 @@ autostarted by either client.
    a new picker (covering `/pick-submit`, the button, and resumed sessions),
    and the `pick-lockin` skill strips the announce button via the bot's
    `close_pick_announcement` tool.
-10. ~~Leaderboard/round-summary formatting~~ **done** — `/scores`, `/pick`,
-    and the `post_pick_reveal`/`post_standings` MCP tools all render ranked
-    tables.
+10. ~~Leaderboard/round-summary formatting~~ **done** — `/leaderboard`, `/pick`,
+    and the `post_pick_reveal`/`post_standings`/`post_leaderboard` MCP tools
+    all render ranked tables.
 11. ~~The race-week orchestration skills~~ **done** — seven skills under
     `.claude/skills/`, see "Race-week skill set (built)" above. Superseded
     the original 7-step sketch (merged pre-race-analysis into `race-end`'s

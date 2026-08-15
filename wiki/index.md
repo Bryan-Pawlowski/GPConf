@@ -1,6 +1,6 @@
 # GPConf wiki
 
-> As of `4f40de8` (2026-08-13) + uncommitted changes (see [log.md](log.md)).
+> As of `2bfdba6` + uncommitted changes (see [log.md](log.md)).
 
 GPConf is a Windows desktop app (ImGui + OpenGL 3.3 + SDL3, .NET) for building
 and running Formula 1 "confidence cup" fantasy seasons: season/driver/team
@@ -27,14 +27,17 @@ scraped race results.
   (currently manual) gap between "CSV on disk" and "data in `gpconf.data`".
 - **[pickem-bot-plan.md](pickem-bot-plan.md)** — design & tech plan for a
   Discord pick'em bot extending the confidence-cup model. The `GPConf.DiscordBot/`
-  scaffold, DM-only read commands, the pick-submission flow (`/pick-submit`,
-  `/pick-announce`), LLM analysis commands, the bot-as-MCP-server surface, and
-  the seven race-week orchestration skills are all built.
+  scaffold, DM-only read commands (now wizards), the pick-submission flow
+  (`/pick-submit`, `/pick-announce`), LLM analysis commands, the bot-as-MCP-server
+  surface, and the seven race-week orchestration skills are all built.
 - **[llm-analysis-commands.md](llm-analysis-commands.md)** — four Discord
   slash commands (`/driver-analysis`, `/player-analysis`, `/season-overview`,
   `/race-recap`) that generate narrative text via a local Ollama server,
   layered on the same data — a separate mechanism from the MCP-skill-driven
-  recaps `pickem-bot-plan.md` envisions.
+  recaps `pickem-bot-plan.md` envisions. Also documents the hard convention
+  that any command needing structured input (including the DM-only read
+  commands `/standings`, `/results`, `/quali`, `/practice`, `/pick`,
+  `/rules`) must use a parameterless dropdown wizard.
 - **[log.md](log.md)** — dated log of what changed in the codebase and in
   this wiki.
 

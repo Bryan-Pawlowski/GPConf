@@ -567,4 +567,720 @@ public static class AnalysisFacts
         var d = driverMap.GetValueOrDefault(top.Key);
         return $"{label}: {d?.Name ?? "unknown"} ({top.Value})";
     }
+
+    /// <summary>
+    /// Computes deterministic season statistics for the `/season-stats` slash command.
+    /// All numbers come from real data via DataService/CCUtils — no LLM inference.
+    /// </summary>
+    public static string BuildSeasonStatsFacts(DataService data, Season season, Race cutoff, League? league = null, GameSeason? gs = null)
+    {
+        var driverMap = season.Drivers.ToDictionary(d => d.Id, d => d);
+        var completedRaces = season.Races
+            .Where(r => r.Round <= cutoff.Round && r.RaceResults.Any(rr => rr.IsComplete))
+            .OrderBy(r => r.Round)
+            .ToList();
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"Season: {season.Name} ({season.Year})");
+        sb.AppendLine($"Races completed: {completedRaces.Count} of {season.Races.Count} scheduled");
+        sb.AppendLine();
+
+        var driverStats = new Dictionary<ByteString, (List<int> finishes, List<int> quals, int dnfs, int dnss, int dsqs, int scoreRaces)>();
+        foreach (var d in season.Drivers)
+            driverStats[d.Id] = ([], [], 0, 0, 0, 0);
+
+        foreach (var race in completedRaces)
+        {
+            var mainResult = race.RaceResults.Where(rr => rr.IsComplete).OrderByDescending(rr => rr.Results.Count).FirstOrDefault();
+            if (mainResult is null) continue;
+            var qualiOrder = QualifyingOrder(race);
+
+            foreach (var dr in mainResult.Results)
+            {
+                var existing = driverStats[dr.DriverId];
+                existing.finishes.Add(dr.Position);
+                if (dr.Points > 0) existing.scoreRaces++;
+                if (dr.Status is FinishStatus.Dnf) existing.dnfs++;
+                if (dr.Status is FinishStatus.Dns) existing.dnss++;
+                if (dr.Status is FinishStatus.Dsq) existing.dsqs++;
+                driverStats[dr.DriverId] = existing;
+
+                var qualiIdx = qualiOrder.IndexOf(dr.DriverId);
+                if (qualiIdx >= 0)
+                {
+                    var stats = driverStats[dr.DriverId];
+                    stats.quals.Add(qualiIdx + 1);
+                    driverStats[dr.DriverId] = stats;
+                }
+            }
+        }
+
+        sb.AppendLine("Driver reliability (fewest DNFs/DNS):");
+        var reliability = driverStats
+            .Select(kv => (Driver: driverMap.GetValueOrDefault(kv.Key), Starts: kv.Value.finishes.Count, DNFs: kv.Value.dnfs, DNS: kv.Value.dnss))
+            .Where(x => x.Starts > 0)
+            .OrderBy(x => x.DNFs + x.DNS)
+            .ThenBy(x => x.Starts)
+            .Take(5)
+            .Select(x => $"{x.Driver?.Name ?? "unknown"}: {x.DNFs + x.DNS}/{x.Starts} races")
+            .ToList();
+        sb.AppendLine(reliability.Count > 0 ? string.Join("\n", reliability) : "(no data)");
+        sb.AppendLine();
+
+        sb.AppendLine("Lowest qualifying SD (most consistent, min 2 races):");
+        var qualiConsistency = driverStats
+            .Select(kv => (Driver: driverMap.GetValueOrDefault(kv.Key), Count: kv.Value.quals.Count, StdDev: GetStdDev(kv.Value.quals)))
+            .Where(x => x.Count >= 2)
+            .OrderBy(x => x.StdDev)
+            .Take(5)
+            .Select(x => $"{x.Driver?.Name ?? "unknown"}: SD {x.StdDev:F2} ({x.Count} races)")
+            .ToList();
+        sb.AppendLine(qualiConsistency.Count > 0 ? string.Join("\n", qualiConsistency) : "(no qualifying data with 2+ races)");
+        sb.AppendLine();
+
+        sb.AppendLine("Longest winless streak:");
+        var wins = new List<(string driver, int round)>();
+        foreach (var race in completedRaces)
+        {
+            var mainResult = race.RaceResults.Where(rr => rr.IsComplete).OrderByDescending(rr => rr.Results.Count).FirstOrDefault();
+            if (mainResult is null) continue;
+            foreach (var dr in mainResult.Results.Where(x => x.Position == 1))
+                wins.Add((driverMap.GetValueOrDefault(dr.DriverId)?.Name ?? "unknown", race.Round));
+        }
+        var winlessStreak = GetLongestGap(wins, completedRaces.LastOrDefault()?.Round ?? 0);
+        sb.AppendLine(winlessStreak ?? "n/a (no wins yet this season)");
+        sb.AppendLine();
+
+        sb.AppendLine("Average qualifying-to-race position change:");
+        var qualiRaceDiff = driverStats
+            .Select(kv =>
+            {
+                var driver = driverMap.GetValueOrDefault(kv.Key);
+                var finishes = kv.Value.finishes;
+                var quals = kv.Value.quals;
+                int count = Math.Min(finishes.Count, quals.Count);
+                if (count == 0) return (Driver: driver, AvgDiff: (double?)null);
+                double avg = Enumerable.Range(0, count)
+                    .Select(i => finishes[i] - quals[i])
+                    .Average();
+                return (Driver: driver, AvgDiff: avg);
+            })
+            .Where(x => x.AvgDiff.HasValue)
+            .OrderBy(x => x.AvgDiff!.Value)
+            .Take(5)
+            .Select(x => $"{x.Driver?.Name ?? "unknown"}: avg {x.AvgDiff:+0;-0;=0} position(s) (quali -> race)")
+            .ToList();
+        sb.AppendLine(qualiRaceDiff.Count > 0 ? string.Join("\n", qualiRaceDiff) : "(no data)");
+        sb.AppendLine();
+
+        if (gs is not null && league is not null)
+        {
+            sb.AppendLine($"Confidence-cup league: {league.LeagueName}");
+            sb.AppendLine();
+
+            var perRace = data.PlayerScoresPerRace(season, gs).Where(x => x.Race.Round <= cutoff.Round).ToList();
+            var playerIds = gs.ParticipatingPlayers.ToDictionary(p => p.Id);
+
+            sb.AppendLine("Most pick-perfect races (all picks scored):");
+            var playerPerfect = new Dictionary<ByteString, List<int>>();
+            foreach (var p in gs.ParticipatingPlayers)
+                playerPerfect[p.Id] = new List<int>();
+
+            foreach (var rps in perRace)
+            {
+                if (!rps.Race.RaceResults.Any(rr => rr.IsComplete)) continue;
+                var gameRace = gs.Races.FirstOrDefault(gr => gr.RaceId == rps.Race.Id);
+                if (gameRace is null) continue;
+                foreach (var picks in gameRace.PicksPerPlayer)
+                {
+                    if (!playerIds.ContainsKey(picks.PlayerId)) continue;
+                    var playerScore = rps.ScoreByPlayer.GetValueOrDefault(picks.PlayerId) ?? 0f;
+                    if (playerScore > 0)
+                        playerPerfect[picks.PlayerId].Add(rps.Race.Round);
+                }
+            }
+
+            var perfectRows = playerPerfect
+                .OrderByDescending(x => x.Value.Count)
+                .Select(x => $"{playerIds[x.Key]?.PlayerName ?? "unknown"}: {x.Value.Count} race(s)")
+                .ToList();
+            sb.AppendLine(perfectRows.Count > 0 ? string.Join("\n", perfectRows.Take(5)) : "(none)");
+            sb.AppendLine();
+
+            sb.AppendLine("Missed opportunities (scoreable driver not picked by anyone):");
+            var missedCount = 0;
+            foreach (var race in completedRaces)
+            {
+                if (!race.RaceResults.Any(rr => rr.IsComplete)) continue;
+                var mainResult = race.RaceResults.Where(rr => rr.IsComplete).OrderByDescending(rr => rr.Results.Count).FirstOrDefault();
+                if (mainResult is null) continue;
+                var gameRace = gs.Races.FirstOrDefault(gr => gr.RaceId == race.Id);
+                if (gameRace is null) continue;
+
+                var prevRace = season.Races.OrderBy(r => r.Round).LastOrDefault(r => r.Round < race.Round);
+                var champPts = prevRace is not null ? data.ChampionshipPoints(season, prevRace) : [];
+                var eligible = CCUtils.GetEligibleDriversWithPos(season, prevRace, (gs.PickRules ?? new PickRules()).PositionCutoff);
+
+                var pickedDriverIds = new HashSet<ByteString>();
+                foreach (var picks in gameRace.PicksPerPlayer)
+                    foreach (var dId in picks.DriverId)
+                        if (!dId.IsEmpty) pickedDriverIds.Add(dId);
+
+                foreach (var e in eligible)
+                {
+                    var dr = mainResult.Results.FirstOrDefault(x => x.DriverId == e.driver.Id);
+                    if (dr is not null && dr.Points > 0 && !pickedDriverIds.Contains(e.driver.Id))
+                    {
+                        missedCount++;
+                        sb.AppendLine($"- Round {race.Round} {race.Name}: {driverMap.GetValueOrDefault(e.driver.Id)?.Name ?? "unknown"} (champ P{e.champPos}) scored but was not picked by anyone");
+                    }
+                }
+            }
+            sb.AppendLine(missedCount == 0 ? "(no missed opportunities this season)" : "");
+            sb.AppendLine();
+
+            sb.AppendLine("Zero-score weeks:");
+            var zeroScoreWeeks = new Dictionary<ByteString, int>();
+            foreach (var p in gs.ParticipatingPlayers)
+                zeroScoreWeeks[p.Id] = 0;
+            foreach (var rps in perRace)
+                if (rps.Race.RaceResults.Any(rr => rr.IsComplete))
+                    foreach (var kv in rps.ScoreByPlayer)
+                        if ((kv.Value ?? 0f) <= 0f)
+                            zeroScoreWeeks[kv.Key] = zeroScoreWeeks.GetValueOrDefault(kv.Key) + 1;
+
+            var zeroRows = zeroScoreWeeks
+                .OrderByDescending(x => x.Value)
+                .Select(x => $"{playerIds[x.Key]?.PlayerName ?? "unknown"}: {x.Value} week(s)")
+                .ToList();
+            sb.AppendLine(zeroRows.Count > 0 ? string.Join("\n", zeroRows) : "(none)");
+
+            sb.AppendLine();
+            sb.AppendLine("League-wide most-picked driver per race:");
+            foreach (var rps in perRace)
+            {
+                var gameRace = gs.Races.FirstOrDefault(gr => gr.RaceId == rps.Race.Id);
+                if (gameRace is null) continue;
+                var pickFreq = new Dictionary<ByteString, int>();
+                foreach (var picks in gameRace.PicksPerPlayer)
+                    foreach (var dId in picks.DriverId)
+                        if (!dId.IsEmpty) pickFreq[dId] = pickFreq.GetValueOrDefault(dId) + 1;
+                if (pickFreq.Count > 0)
+                {
+                    var mostFreq = pickFreq.OrderByDescending(kv => kv.Value).First();
+                    var d = driverMap.GetValueOrDefault(mostFreq.Key);
+                    sb.AppendLine($"- Round {rps.Race.Round} {rps.Race.Name}: {d?.Name ?? "unknown"} (picked {mostFreq.Value} time(s))");
+                }
+            }
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Computes deterministic head-to-head statistics between two drivers for the `/compare`
+    /// slash command. All numbers come from real data — no LLM inference.
+    /// </summary>
+    public static string BuildCompareFacts(DataService data, Season season, Driver driverA, Driver driverB, Race cutoff)
+    {
+        var teamMap = season.Teams.ToDictionary(t => t.Id, t => t);
+        var points = data.ChampionshipPoints(season, cutoff);
+        var positions = data.ChampionshipPositions(points);
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"**Championship**");
+        sb.AppendLine($"- {driverA.Name}: P{positions.GetValueOrDefault(driverA.Id, 0)} — {points.GetValueOrDefault(driverA.Id, 0f):F1} pts");
+        sb.AppendLine($"- {driverB.Name}: P{positions.GetValueOrDefault(driverB.Id, 0)} — {points.GetValueOrDefault(driverB.Id, 0f):F1} pts");
+        sb.AppendLine();
+
+        int aBeatsB = 0, bBeatsA = 0, bothDnf = 0, aDnf = 0, bDnf = 0, sharedRaces = 0;
+        var aFinishes = new List<int>();
+        var bFinishes = new List<int>();
+        var aQuali = new List<int>();
+        var bQuali = new List<int>();
+        var aQualiBeatsB = 0;
+        var bQualiBeatsA = 0;
+        var aFastestLaps = new List<float>();
+        var bFastestLaps = new List<float>();
+        var aRaceTimes = new List<float>();
+        var bRaceTimes = new List<float>();
+        var aPracticeLaps = new List<float>();
+        var bPracticeLaps = new List<float>();
+
+        foreach (var race in season.Races.OrderBy(r => r.Round))
+        {
+            if (race.Round > cutoff.Round) break;
+            var mainResult = race.RaceResults.Where(rr => rr.IsComplete).OrderByDescending(rr => rr.Results.Count).FirstOrDefault();
+            if (mainResult is null) continue;
+
+            var drA = mainResult.Results.FirstOrDefault(x => x.DriverId == driverA.Id);
+            var drB = mainResult.Results.FirstOrDefault(x => x.DriverId == driverB.Id);
+            if (drA is null || drB is null) continue;
+
+            sharedRaces++;
+            aFinishes.Add(drA.Position);
+            bFinishes.Add(drB.Position);
+            if (drA.Position < drB.Position) aBeatsB++;
+            else if (drB.Position < drA.Position) bBeatsA++;
+            else bothDnf++;
+
+            if (drA.Status is FinishStatus.Dnf or FinishStatus.Dsq) aDnf++;
+            if (drB.Status is FinishStatus.Dnf or FinishStatus.Dsq) bDnf++;
+
+            // Race pace: fastest lap and race time (only meaningful when both finished).
+            if (drA.FastestLapSeconds > 0) aFastestLaps.Add(drA.FastestLapSeconds);
+            if (drB.FastestLapSeconds > 0) bFastestLaps.Add(drB.FastestLapSeconds);
+            if (drA.RaceTime > 0 && drB.RaceTime > 0)
+            {
+                aRaceTimes.Add(drA.RaceTime);
+                bRaceTimes.Add(drB.RaceTime);
+            }
+
+            // Qualifying: grid position + head-to-head quali battle.
+            var qualiOrder = QualifyingOrder(race);
+            var aIdx = qualiOrder.IndexOf(driverA.Id);
+            var bIdx = qualiOrder.IndexOf(driverB.Id);
+            if (aIdx >= 0) aQuali.Add(aIdx + 1);
+            if (bIdx >= 0) bQuali.Add(bIdx + 1);
+            if (aIdx >= 0 && bIdx >= 0)
+            {
+                if (aIdx < bIdx) aQualiBeatsB++;
+                else if (bIdx < aIdx) bQualiBeatsA++;
+            }
+
+            // Practice pace: fastest lap across all practice sessions.
+            foreach (var p in race.Practices)
+            {
+                var la = p.LapData.FirstOrDefault(ld => ld.DriverId == driverA.Id);
+                var lb = p.LapData.FirstOrDefault(ld => ld.DriverId == driverB.Id);
+                if (la is not null && la.FastestLapSeconds > 0) aPracticeLaps.Add(la.FastestLapSeconds);
+                if (lb is not null && lb.FastestLapSeconds > 0) bPracticeLaps.Add(lb.FastestLapSeconds);
+            }
+        }
+
+        sb.AppendLine($"**Head-to-head** ({sharedRaces} shared races)");
+        sb.AppendLine($"- {driverA.Name} beat {driverB.Name}: {aBeatsB} time(s)");
+        sb.AppendLine($"- {driverB.Name} beat {driverA.Name}: {bBeatsA} time(s)");
+        sb.AppendLine($"- Both DNF/DSQ: {bothDnf} time(s)");
+        sb.AppendLine();
+
+        sb.AppendLine($"**Reliability**");
+        sb.AppendLine($"- {driverA.Name}: {aDnf} DNF/DSQ, avg finish P{(aFinishes.Count > 0 ? aFinishes.Average() : 0):F1}");
+        sb.AppendLine($"- {driverB.Name}: {bDnf} DNF/DSQ, avg finish P{(bFinishes.Count > 0 ? bFinishes.Average() : 0):F1}");
+        sb.AppendLine();
+
+        sb.AppendLine($"**Qualifying** (avg grid position)");
+        sb.AppendLine($"- {driverA.Name}: P{(aQuali.Count > 0 ? aQuali.Average() : 0):F1} ({aQuali.Count} races)");
+        sb.AppendLine($"- {driverB.Name}: P{(bQuali.Count > 0 ? bQuali.Average() : 0):F1} ({bQuali.Count} races)");
+        sb.AppendLine($"- Quali head-to-head: {driverA.Name} ahead {aQualiBeatsB}×, {driverB.Name} ahead {bQualiBeatsA}×");
+        sb.AppendLine();
+
+        sb.AppendLine($"**Race pace** (fastest lap, avg across shared races)");
+        sb.AppendLine($"- {driverA.Name}: {FormatLapTime(aFastestLaps.Count > 0 ? aFastestLaps.Average() : 0)} ({aFastestLaps.Count} races)");
+        sb.AppendLine($"- {driverB.Name}: {FormatLapTime(bFastestLaps.Count > 0 ? bFastestLaps.Average() : 0)} ({bFastestLaps.Count} races)");
+        if (aFastestLaps.Count > 0 && bFastestLaps.Count > 0)
+        {
+            var diff = aFastestLaps.Average() - bFastestLaps.Average();
+            sb.AppendLine($"- Avg fastest-lap gap: {(diff < 0 ? driverA.Name : driverB.Name)} {(Math.Abs(diff) < 0.001 ? "level" : $"{Math.Abs(diff):F3}s faster")}");
+        }
+        if (aRaceTimes.Count > 0 && bRaceTimes.Count > 0)
+        {
+            var timeDiff = aRaceTimes.Average() - bRaceTimes.Average();
+            sb.AppendLine($"- Avg race time: {driverA.Name} {FormatRaceTime(aRaceTimes.Average())} vs {driverB.Name} {FormatRaceTime(bRaceTimes.Average())}");
+            sb.AppendLine($"- Avg race-time gap (both finished): {(timeDiff < 0 ? driverA.Name : driverB.Name)} {(Math.Abs(timeDiff) < 0.001 ? "level" : $"{Math.Abs(timeDiff):F1}s faster")}");
+        }
+        sb.AppendLine();
+
+        sb.AppendLine($"**Practice pace** (fastest lap, all sessions)");
+        sb.AppendLine($"- {driverA.Name}: {FormatLapTime(aPracticeLaps.Count > 0 ? aPracticeLaps.Average() : 0)} ({aPracticeLaps.Count} laps)");
+        sb.AppendLine($"- {driverB.Name}: {FormatLapTime(bPracticeLaps.Count > 0 ? bPracticeLaps.Average() : 0)} ({bPracticeLaps.Count} laps)");
+        if (aPracticeLaps.Count > 0 && bPracticeLaps.Count > 0)
+        {
+            var diff = aPracticeLaps.Average() - bPracticeLaps.Average();
+            sb.AppendLine($"- Avg practice gap: {(diff < 0 ? driverA.Name : driverB.Name)} {(Math.Abs(diff) < 0.001 ? "level" : $"{Math.Abs(diff):F3}s faster")}");
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Computes deterministic head-to-head statistics between two confidence-cup players for the
+    /// `/h2h` slash command. All numbers come from real data — no LLM inference.
+    /// </summary>
+    public static string BuildH2HFacts(DataService data, Season season, GameSeason gs, Player playerA, Player playerB, Race cutoff)
+    {
+        var rules = gs.PickRules ?? new PickRules();
+        var driverMap = season.Drivers.ToDictionary(d => d.Id, d => d);
+        var perRace = data.PlayerScoresPerRace(season, gs).Where(x => x.Race.Round <= cutoff.Round).ToList();
+        var cumulative = data.PlayerScores(season, gs, cutoff);
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"**Cumulative**");
+        sb.AppendLine($"- {playerA.PlayerName}: {cumulative.GetValueOrDefault(playerA.Id):F1} pts");
+        sb.AppendLine($"- {playerB.PlayerName}: {cumulative.GetValueOrDefault(playerB.Id):F1} pts");
+        sb.AppendLine();
+
+        int aWins = 0, bWins = 0, ties = 0, aNoPick = 0, bNoPick = 0;
+        var aScores = new List<float>();
+        var bScores = new List<float>();
+        var sharedPicks = new Dictionary<ByteString, int>();
+        var aOnlyPicks = new Dictionary<ByteString, int>();
+        var bOnlyPicks = new Dictionary<ByteString, int>();
+
+        foreach (var rps in perRace)
+        {
+            if (!rps.Race.RaceResults.Any(rr => rr.IsComplete)) continue;
+            var gameRace = gs.Races.FirstOrDefault(gr => gr.RaceId == rps.Race.Id);
+            if (gameRace is null) continue;
+
+            var aScore = rps.ScoreByPlayer.GetValueOrDefault(playerA.Id);
+            var bScore = rps.ScoreByPlayer.GetValueOrDefault(playerB.Id);
+            if (aScore is null) aNoPick++;
+            if (bScore is null) bNoPick++;
+            if (aScore is float av) aScores.Add(av);
+            if (bScore is float bv) bScores.Add(bv);
+
+            if (aScore is float av2 && bScore is float bv2)
+            {
+                if (av2 > bv2) aWins++;
+                else if (bv2 > av2) bWins++;
+                else ties++;
+            }
+
+            var picksA = gameRace.PicksPerPlayer.FirstOrDefault(pp => pp.PlayerId == playerA.Id);
+            var picksB = gameRace.PicksPerPlayer.FirstOrDefault(pp => pp.PlayerId == playerB.Id);
+            if (picksA is null || picksB is null) continue;
+
+            var aSet = picksA.DriverId.Where(id => !id.IsEmpty).ToHashSet();
+            var bSet = picksB.DriverId.Where(id => !id.IsEmpty).ToHashSet();
+            foreach (var id in aSet)
+            {
+                if (bSet.Contains(id)) sharedPicks[id] = sharedPicks.GetValueOrDefault(id) + 1;
+                else aOnlyPicks[id] = aOnlyPicks.GetValueOrDefault(id) + 1;
+            }
+            foreach (var id in bSet)
+                if (!aSet.Contains(id)) bOnlyPicks[id] = bOnlyPicks.GetValueOrDefault(id) + 1;
+        }
+
+        sb.AppendLine($"**Head-to-head** (decided races, both submitted)");
+        sb.AppendLine($"- {playerA.PlayerName} outscored {playerB.PlayerName}: {aWins} time(s)");
+        sb.AppendLine($"- {playerB.PlayerName} outscored {playerA.PlayerName}: {bWins} time(s)");
+        sb.AppendLine($"- Tied: {ties} time(s)");
+        sb.AppendLine($"- {playerA.PlayerName} no-pick races: {aNoPick}, {playerB.PlayerName} no-pick races: {bNoPick}");
+        sb.AppendLine();
+
+        sb.AppendLine($"**Scoring consistency**");
+        sb.AppendLine($"- {playerA.PlayerName}: avg {(aScores.Count > 0 ? aScores.Average() : 0):F1} pts/race, best {(aScores.Count > 0 ? aScores.Max() : 0):F1}");
+        sb.AppendLine($"- {playerB.PlayerName}: avg {(bScores.Count > 0 ? bScores.Average() : 0):F1} pts/race, best {(bScores.Count > 0 ? bScores.Max() : 0):F1}");
+        sb.AppendLine();
+
+        sb.AppendLine($"**Shared picks** (both picked the same driver)");
+        var sharedRows = sharedPicks.OrderByDescending(kv => kv.Value).Take(5)
+            .Select(kv => $"- {driverMap.GetValueOrDefault(kv.Key)?.Name ?? "unknown"}: {kv.Value} time(s)")
+            .ToList();
+        sb.AppendLine(sharedRows.Count > 0 ? string.Join("\n", sharedRows) : "- (none)");
+        sb.AppendLine();
+
+        sb.AppendLine($"**{playerA.PlayerName}'s unique picks** (not picked by {playerB.PlayerName})");
+        var aOnlyRows = aOnlyPicks.OrderByDescending(kv => kv.Value).Take(5)
+            .Select(kv => $"- {driverMap.GetValueOrDefault(kv.Key)?.Name ?? "unknown"}: {kv.Value} time(s)")
+            .ToList();
+        sb.AppendLine(aOnlyRows.Count > 0 ? string.Join("\n", aOnlyRows) : "- (none)");
+        sb.AppendLine();
+
+        sb.AppendLine($"**{playerB.PlayerName}'s unique picks** (not picked by {playerA.PlayerName})");
+        var bOnlyRows = bOnlyPicks.OrderByDescending(kv => kv.Value).Take(5)
+            .Select(kv => $"- {driverMap.GetValueOrDefault(kv.Key)?.Name ?? "unknown"}: {kv.Value} time(s)")
+            .ToList();
+        sb.AppendLine(bOnlyRows.Count > 0 ? string.Join("\n", bOnlyRows) : "- (none)");
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Computes a rolling confidence-cup projection for the `/projected` slash command: what the
+    /// standings could look like after the next pickable race if each player picks the highest-
+    /// multiplier eligible drivers. Deterministic — no LLM inference.
+    /// </summary>
+    public static string BuildProjectedFacts(DataService data, Season season, GameSeason gs, Race nextRace)
+    {
+        var rules = gs.PickRules ?? new PickRules();
+        var driverMap = season.Drivers.ToDictionary(d => d.Id, d => d);
+        var current = data.PlayerScores(season, gs, nextRace);
+
+        // Eligibility for the next race is gated on the race immediately before it.
+        var prevRace = season.Races.OrderBy(r => r.Round).LastOrDefault(r => r.Round < nextRace.Round);
+        var eligible = CCUtils.GetEligibleDriversWithPos(season, prevRace, rules.PositionCutoff)
+            .OrderByDescending(e => CCUtils.GetStandingsMultiplier(rules, e.champPos))
+            .ThenByDescending(e => e.champPos)
+            .ToList();
+
+        // Best-case: each player picks the top-N highest-multiplier eligible drivers.
+        var bestPicks = eligible.Take(rules.NumPicks).Select(e => e.driver.Id).ToArray();
+        float bestCaseGain = 0f;
+        for (int i = 0; i < bestPicks.Length; i++)
+            bestCaseGain += CCUtils.ScorePickSlot(season, rules, i, bestPicks[i], nextRace, eligible[i].champPos, hasResults: false);
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"Projection for {nextRace.Name} (Round {nextRace.Round})");
+        sb.AppendLine($"Best-case picks: {string.Join(", ", bestPicks.Select(id => driverMap.GetValueOrDefault(id)?.Name ?? "unknown"))}");
+        sb.AppendLine($"Best-case gain per player: +{bestCaseGain:F1} pts");
+        sb.AppendLine();
+
+        var projected = gs.ParticipatingPlayers
+            .Select(p => (p.PlayerName, p.Color, current: current.GetValueOrDefault(p.Id), projected: current.GetValueOrDefault(p.Id) + bestCaseGain))
+            .OrderByDescending(x => x.projected)
+            .ToList();
+
+        sb.AppendLine("Projected standings (if everyone picks optimally):");
+        for (int i = 0; i < projected.Count; i++)
+        {
+            var p = projected[i];
+            var delta = p.projected - p.current;
+            sb.AppendLine($"- P{i + 1}: {p.PlayerName} — {p.projected:F1} pts (current {p.current:F1}, +{delta:F1})");
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Builds a plain-text facts block for the `/team-analysis` LLM command. Every number, name,
+    /// and event is computed from real protobuf data — the model only narrates, never computes.
+    /// </summary>
+    public static string BuildTeamFacts(DataService data, Season season, Team team, Race cutoff, League? league = null, GameSeason? gs = null)
+    {
+        var driverMap = season.Drivers.ToDictionary(d => d.Id, d => d);
+        var teamDrivers = season.Drivers.Where(d => d.CurrentTeamId == team.Id).ToList();
+        var manufacturer = season.Manufacturers.FirstOrDefault(m => m.Id == team.ManufacturerId);
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"Team: {team.Name}, manufacturer: {manufacturer?.Name ?? "unknown"}");
+        sb.AppendLine($"Drivers: {string.Join(", ", teamDrivers.Select(d => $"{d.Name} (#{d.Number})"))}");
+        sb.AppendLine();
+
+        // Constructor points: sum of both drivers' points across completed races.
+        var points = data.ChampionshipPoints(season, cutoff);
+        var teamPoints = teamDrivers.Sum(d => points.GetValueOrDefault(d.Id, 0f));
+        var positions = data.ChampionshipPositions(points);
+        var teamPos = teamDrivers.Count > 0 ? teamDrivers.Min(d => positions.GetValueOrDefault(d.Id, int.MaxValue)) : 0;
+        sb.AppendLine($"Constructor points through {cutoff.Name}: {teamPoints:F1} (best driver championship position P{teamPos})");
+        sb.AppendLine();
+
+        sb.AppendLine("Race-by-race team results:");
+        var raceLines = new List<string>();
+        int podiums = 0, wins = 0, dnfs = 0, bothScored = 0, racesRun = 0;
+        var driverFinishes = teamDrivers.ToDictionary(d => d.Id, _ => new List<int>());
+
+        foreach (var race in season.Races.OrderBy(r => r.Round))
+        {
+            if (race.Round > cutoff.Round) break;
+            var mainResult = race.RaceResults.Where(rr => rr.IsComplete).OrderByDescending(rr => rr.Results.Count).FirstOrDefault();
+            if (mainResult is null) continue;
+
+            var teamResults = mainResult.Results.Where(dr => teamDrivers.Any(d => d.Id == dr.DriverId)).OrderBy(dr => dr.Position).ToList();
+            if (teamResults.Count == 0) continue;
+
+            racesRun++;
+            var resultText = string.Join(", ", teamResults.Select(dr =>
+            {
+                var d = driverMap.GetValueOrDefault(dr.DriverId);
+                return $"P{dr.Position} {d?.Name ?? "unknown"} ({FormatStatus(dr.Status)})";
+            }));
+            raceLines.Add($"- Round {race.Round} {race.Name}: {resultText}");
+
+            foreach (var dr in teamResults)
+            {
+                if (dr.Position == 1) wins++;
+                if (dr.Position is >= 1 and <= 3) podiums++;
+                if (dr.Status is FinishStatus.Dnf or FinishStatus.Dsq) dnfs++;
+                if (dr.Points > 0 && driverFinishes.ContainsKey(dr.DriverId)) driverFinishes[dr.DriverId].Add(dr.Position);
+            }
+            if (teamResults.Count >= 2 && teamResults.All(dr => dr.Points > 0)) bothScored++;
+        }
+        sb.AppendLine(raceLines.Count > 0 ? string.Join("\n", raceLines) : "(no completed races)");
+        sb.AppendLine();
+
+        sb.AppendLine("Season aggregates:");
+        sb.AppendLine($"- Wins: {wins}, podiums: {podiums}, DNF/DSQ: {dnfs}, races run: {racesRun}");
+        sb.AppendLine($"- Both drivers scored in the same race: {bothScored} time(s)");
+        foreach (var d in teamDrivers)
+        {
+            var finishes = driverFinishes.GetValueOrDefault(d.Id) ?? [];
+            sb.AppendLine($"- {d.Name}: avg finish P{(finishes.Count > 0 ? finishes.Average() : 0):F1} ({finishes.Count} races)");
+        }
+
+        if (gs is not null && league is not null)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"Confidence-cup league: {league.LeagueName}");
+            var rules = gs.PickRules ?? new PickRules();
+            var nextRace = data.NextPickableRace(season);
+            var prevRaceForEligibility = nextRace is not null
+                ? season.Races.OrderBy(r => r.Round).LastOrDefault(r => r.Round < nextRace.Round)
+                : cutoff;
+            var eligiblePairs = CCUtils.GetEligibleDriversWithPos(season, prevRaceForEligibility, rules.PositionCutoff);
+            foreach (var d in teamDrivers)
+            {
+                var eligibleEntry = eligiblePairs.FirstOrDefault(x => x.driver.Id == d.Id);
+                bool isEligible = eligibleEntry.driver is not null;
+                sb.AppendLine($"- {d.Name} pick eligibility for {nextRace?.Name ?? "the next race"}: {(isEligible ? "eligible" : "not eligible")}" +
+                    (isEligible && eligibleEntry.champPos > 0
+                        ? $" (multiplier x{CCUtils.GetStandingsMultiplier(rules, eligibleEntry.champPos):G}, entering at P{eligibleEntry.champPos})"
+                        : ""));
+            }
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Computes deterministic head-to-head statistics between two teams for the `/team-analysis`
+    /// slash command. All numbers come from real data — no LLM inference.
+    /// </summary>
+    public static string BuildTeamCompareFacts(DataService data, Season season, Team teamA, Team teamB, Race cutoff, League? league = null, GameSeason? gs = null)
+    {
+        var driverMap = season.Drivers.ToDictionary(d => d.Id, d => d);
+        var teamADrivers = season.Drivers.Where(d => d.CurrentTeamId == teamA.Id).ToList();
+        var teamBDrivers = season.Drivers.Where(d => d.CurrentTeamId == teamB.Id).ToList();
+        var manA = season.Manufacturers.FirstOrDefault(m => m.Id == teamA.ManufacturerId);
+        var manB = season.Manufacturers.FirstOrDefault(m => m.Id == teamB.ManufacturerId);
+
+        var points = data.ChampionshipPoints(season, cutoff);
+        var positions = data.ChampionshipPositions(points);
+        var teamAPts = teamADrivers.Sum(d => points.GetValueOrDefault(d.Id, 0f));
+        var teamBPts = teamBDrivers.Sum(d => points.GetValueOrDefault(d.Id, 0f));
+        var teamAPos = teamADrivers.Count > 0 ? teamADrivers.Min(d => positions.GetValueOrDefault(d.Id, int.MaxValue)) : 0;
+        var teamBPos = teamBDrivers.Count > 0 ? teamBDrivers.Min(d => positions.GetValueOrDefault(d.Id, int.MaxValue)) : 0;
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"**Constructor points** (through {cutoff.Name})");
+        sb.AppendLine($"- {teamA.Name}: {teamAPts:F1} pts (best driver P{teamAPos})");
+        sb.AppendLine($"- {teamB.Name}: {teamBPts:F1} pts (best driver P{teamBPos})");
+        sb.AppendLine();
+
+        // Per-team aggregates across completed races.
+        (int wins, int podiums, int dnfs, int bothScored, int racesRun, List<int> finishes) TeamAgg(Team team, List<Driver> drivers)
+        {
+            int wins = 0, podiums = 0, dnfs = 0, bothScored = 0, racesRun = 0;
+            var finishes = new List<int>();
+            foreach (var race in season.Races.OrderBy(r => r.Round))
+            {
+                if (race.Round > cutoff.Round) break;
+                var mainResult = race.RaceResults.Where(rr => rr.IsComplete).OrderByDescending(rr => rr.Results.Count).FirstOrDefault();
+                if (mainResult is null) continue;
+                var teamResults = mainResult.Results.Where(dr => drivers.Any(d => d.Id == dr.DriverId)).OrderBy(dr => dr.Position).ToList();
+                if (teamResults.Count == 0) continue;
+                racesRun++;
+                foreach (var dr in teamResults)
+                {
+                    if (dr.Position == 1) wins++;
+                    if (dr.Position is >= 1 and <= 3) podiums++;
+                    if (dr.Status is FinishStatus.Dnf or FinishStatus.Dsq) dnfs++;
+                    if (dr.Points > 0) finishes.Add(dr.Position);
+                }
+                if (teamResults.Count >= 2 && teamResults.All(dr => dr.Points > 0)) bothScored++;
+            }
+            return (wins, podiums, dnfs, bothScored, racesRun, finishes);
+        }
+
+        var aggA = TeamAgg(teamA, teamADrivers);
+        var aggB = TeamAgg(teamB, teamBDrivers);
+
+        sb.AppendLine($"**Season aggregates**");
+        sb.AppendLine($"- {teamA.Name}: {aggA.wins} wins, {aggA.podiums} podiums, {aggA.dnfs} DNF/DSQ, both scored {aggA.bothScored}×, avg finish P{(aggA.finishes.Count > 0 ? aggA.finishes.Average() : 0):F1}");
+        sb.AppendLine($"- {teamB.Name}: {aggB.wins} wins, {aggB.podiums} podiums, {aggB.dnfs} DNF/DSQ, both scored {aggB.bothScored}×, avg finish P{(aggB.finishes.Count > 0 ? aggB.finishes.Average() : 0):F1}");
+        sb.AppendLine();
+
+        sb.AppendLine($"**Drivers**");
+        foreach (var d in teamADrivers)
+            sb.AppendLine($"- {teamA.Name}: {d.Name} (#{d.Number}) — P{positions.GetValueOrDefault(d.Id, 0)}, {points.GetValueOrDefault(d.Id, 0f):F1} pts");
+        foreach (var d in teamBDrivers)
+            sb.AppendLine($"- {teamB.Name}: {d.Name} (#{d.Number}) — P{positions.GetValueOrDefault(d.Id, 0)}, {points.GetValueOrDefault(d.Id, 0f):F1} pts");
+
+        if (gs is not null && league is not null)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"**Confidence-cup league**: {league.LeagueName}");
+            var rules = gs.PickRules ?? new PickRules();
+            var nextRace = data.NextPickableRace(season);
+            var prevRaceForEligibility = nextRace is not null
+                ? season.Races.OrderBy(r => r.Round).LastOrDefault(r => r.Round < nextRace.Round)
+                : cutoff;
+            var eligiblePairs = CCUtils.GetEligibleDriversWithPos(season, prevRaceForEligibility, rules.PositionCutoff);
+            foreach (var d in teamADrivers.Concat(teamBDrivers))
+            {
+                var eligibleEntry = eligiblePairs.FirstOrDefault(x => x.driver.Id == d.Id);
+                bool isEligible = eligibleEntry.driver is not null;
+                sb.AppendLine($"- {d.Name} pick eligibility for {nextRace?.Name ?? "the next race"}: {(isEligible ? "eligible" : "not eligible")}" +
+                    (isEligible && eligibleEntry.champPos > 0
+                        ? $" (multiplier x{CCUtils.GetStandingsMultiplier(rules, eligibleEntry.champPos):G}, entering at P{eligibleEntry.champPos})"
+                        : ""));
+            }
+        }
+
+        return sb.ToString();
+    }
+
+    private static string? GetLongestGap(List<(string driver, int round)> events, int totalRounds)
+    {
+        if (events.Count == 0) return null;
+        var perDriver = events.GroupBy(e => e.driver)
+            .ToDictionary(g => g.Key, g => g.OrderBy(e => e.round).Select(e => e.round).ToList());
+
+        string? result = null;
+        int maxGap = 0;
+
+        foreach (var kv in perDriver)
+        {
+            var rounds = kv.Value;
+            int gapAfter = totalRounds - rounds[^1];
+            if (gapAfter > maxGap)
+            {
+                maxGap = gapAfter;
+                result = $"{kv.Key}: {maxGap} race(s) without a win (last win round {rounds[^1]})";
+            }
+        }
+
+        var allGaps = new List<(string driver, int gap, int lastWin)>();
+        foreach (var kv in perDriver)
+        {
+            var rounds = kv.Value;
+            for (int i = 0; i < rounds.Count; i++)
+            {
+                var gapBefore = i == 0 ? rounds[0] - 1 : rounds[i] - rounds[i - 1] - 1;
+                allGaps.Add((kv.Key, gapBefore, rounds[i]));
+            }
+            var gapAfter = totalRounds - rounds[^1];
+            allGaps.Add((kv.Key, gapAfter, rounds[^1]));
+        }
+
+        var longest = allGaps.OrderByDescending(x => x.gap).FirstOrDefault();
+        if (longest.gap > 0)
+            return $"{longest.driver}: {longest.gap} race(s) without a win (last win round {longest.lastWin})";
+        return result;
+    }
+
+    private static double GetStdDev(List<int> values)
+    {
+        if (values.Count <= 1) return 0;
+        var mean = values.Average();
+        var variance = values.Sum(v => (v - mean) * (v - mean)) / values.Count;
+        return Math.Sqrt(variance);
+    }
+
+    // Formats a lap time in seconds as m:ss.fff (e.g. 83.456 -> "1:23.456").
+    private static string FormatLapTime(float seconds)
+    {
+        if (seconds <= 0) return "—";
+        var ts = TimeSpan.FromSeconds(seconds);
+        return $"{(int)ts.TotalMinutes}:{ts.Seconds:00}.{ts.Milliseconds:000}";
+    }
+
+    // Formats a race time in seconds as h:mm:ss.fff (e.g. 5400.5 -> "1:30:00.500").
+    private static string FormatRaceTime(float seconds)
+    {
+        if (seconds <= 0) return "—";
+        var ts = TimeSpan.FromSeconds(seconds);
+        return $"{(int)ts.TotalHours}:{ts.Minutes:00}:{ts.Seconds:00}.{ts.Milliseconds:000}";
+    }
 }

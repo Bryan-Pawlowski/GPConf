@@ -14,6 +14,18 @@ public enum AnalysisKind
     Player,
     Season,
     Recap,
+    Team,
+    SeasonStats,
+    Leaderboard,
+    Compare,
+    H2H,
+    Projected,
+    Standings,
+    Results,
+    Quali,
+    Practice,
+    Pick,
+    Rules,
 }
 
 /// <summary>
@@ -32,6 +44,11 @@ public sealed record AnalysisSession(
     ByteString? LeagueId,
     string? PlayerName,
     ByteString? RaceId,
+    ByteString? TeamId,
+    ByteString? Driver2Id,
+    string? Player2Name,
+    ByteString? Team2Id,
+    int? SessionNumber,
     ulong CallerId,
     DateTime CreatedAt);
 
@@ -46,7 +63,7 @@ public sealed class AnalysisSessionStore
     public string Start(AnalysisKind kind, ByteString seasonId, ulong callerId)
     {
         var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(8));
-        _sessions[token] = new AnalysisSession(kind, seasonId, null, null, null, null, callerId, DateTime.UtcNow);
+        _sessions[token] = new AnalysisSession(kind, seasonId, null, null, null, null, null, null, null, null, null, callerId, DateTime.UtcNow);
         return token;
     }
 

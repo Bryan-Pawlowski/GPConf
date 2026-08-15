@@ -1,7 +1,6 @@
 # Data model
 
-> As of `4f40de8` (+ uncommitted: `Race.pick_deadline_epoch` /
-> `Race.announcement_message_id`, fields 11/12). Source:
+> As of `2bfdba6`. Source:
 > `Src/Protobuf/*.proto`. **Never hand-edit the generated C# classes** — they
 > regenerate from these `.proto` files at build time into the `GPConf`
 > namespace (root `CLAUDE.md`).

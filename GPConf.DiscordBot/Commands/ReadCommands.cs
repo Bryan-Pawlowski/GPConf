@@ -14,28 +14,32 @@ namespace GPConf.DiscordBot.Commands;
 /// </summary>
 public class ReadCommands : InteractionModuleBase<SocketInteractionContext>
 {
-    private readonly DataService _data;
+    // Discord embed description cap is 4096; leave margin.
+    private const int MaxDescriptionLength = 3900;
+    // Discord embed field-value cap is 1024; leave margin.
+    private const int MaxFieldLength = 1000;
 
-    public ReadCommands(DataService data)
+    private readonly DataService _data;
+    private readonly AnalysisSessionStore _analysisSessions;
+
+    public ReadCommands(DataService data, AnalysisSessionStore analysisSessions)
     {
         _data = data;
+        _analysisSessions = analysisSessions;
     }
 
     [SlashCommand("standings", "Current championship standings")]
-    public async Task Standings(
-        [Summary("season", "Season name or year")] string season,
-        [Summary("race", "Race name or round (defaults to latest)")] string? race = null,
-        [Summary("league", "League name (optional, enables eligibility/multiplier columns)")] string? league = null)
+    public async Task Standings()
     {
         await DeferAsync(ephemeral: true);
         var mainData = _data.Load();
-        var s = _data.FindSeason(mainData, season);
-        if (s is null) { await FollowupAsync($"Season '{season}' not found.", ephemeral: true); return; }
+        if (mainData.Seasons.Count == 0) { await FollowupAsync("No seasons configured.", ephemeral: true); return; }
 
-        var target = race is null ? _data.LatestRace(s) : _data.FindRace(s, race);
-        if (target is null) { await FollowupAsync($"Race '{race}' not found.", ephemeral: true); return; }
-
-        await FollowupAsync(embed: BuildStandingsEmbed(_data, mainData, s, target, league), ephemeral: true);
+        var season = mainData.Seasons.OrderByDescending(s => s.Year).First();
+        var token = _analysisSessions.Start(AnalysisKind.Standings, season.Id, Context.User.Id);
+        var session = _analysisSessions.Get(token)!;
+        var components = BuildReadComponents(mainData, token, session, season, disabled: false);
+        await FollowupAsync("Select a season, race, and league, then click Generate:", components: components, ephemeral: true);
     }
 
     // Shared with BotMcpTools.post_standings — the automation path posts the exact same embed
@@ -85,84 +89,17 @@ public class ReadCommands : InteractionModuleBase<SocketInteractionContext>
     }
 
     [SlashCommand("results", "Race results for a race")]
-    public async Task Results(
-        [Summary("season", "Season name or year")] string season,
-        [Summary("race", "Race name or round")] string race,
-        [Summary("league", "League name (optional, enables confidence-cup pick attribution)")] string? league = null)
+    public async Task Results()
     {
         await DeferAsync(ephemeral: true);
         var mainData = _data.Load();
-        var s = _data.FindSeason(mainData, season);
-        if (s is null) { await FollowupAsync($"Season '{season}' not found.", ephemeral: true); return; }
-        var r = _data.FindRace(s, race);
-        if (r is null) { await FollowupAsync($"Race '{race}' not found.", ephemeral: true); return; }
-        if (r.RaceResults.Count == 0) { await FollowupAsync($"No race results stored for '{r.Name}'.", ephemeral: true); return; }
+        if (mainData.Seasons.Count == 0) { await FollowupAsync("No seasons configured.", ephemeral: true); return; }
 
-        if (league is not null)
-        {
-            var (_, gs) = _data.FindGameSeason(mainData, s, league);
-            await FollowupAsync(embed: BuildResultsEmbed(_data, s, r, gs), ephemeral: true);
-            return;
-        }
-
-        var candidates = _data.LeaguesForSeason(mainData, s);
-        if (candidates.Count <= 1)
-        {
-            await FollowupAsync(embed: BuildResultsEmbed(_data, s, r, candidates.Count == 1 ? candidates[0].gs : null), ephemeral: true);
-            return;
-        }
-
-        // No league specified and more than one is configured for this season — try to guess
-        // which one the caller belongs to from their Discord username before asking.
-        var usernames = new[] { Context.User.Username, Context.User.GlobalName }
-            .Where(n => !string.IsNullOrEmpty(n))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        var matches = candidates
-            .Where(c => c.gs.ParticipatingPlayers.Any(p => usernames.Any(u => string.Equals(u, p.PlayerName, StringComparison.OrdinalIgnoreCase))))
-            .ToList();
-        if (matches.Count == 1)
-        {
-            await FollowupAsync(embed: BuildResultsEmbed(_data, s, r, matches[0].gs), ephemeral: true);
-            return;
-        }
-
-        // Ambiguous (matched none, or matched more than one league) — let the caller pick.
-        var menu = new SelectMenuBuilder()
-            .WithCustomId($"results_league:{Convert.ToHexString(s.Id.ToByteArray())}:{Convert.ToHexString(r.Id.ToByteArray())}")
-            .WithPlaceholder("Choose a league")
-            .WithMinValues(1)
-            .WithMaxValues(1);
-        foreach (var (leagueOption, _) in candidates)
-            menu.AddOption(leagueOption.LeagueName, Convert.ToHexString(leagueOption.Id.ToByteArray()));
-        await FollowupAsync(
-            "Couldn't tell which league you're in — pick one to see confidence-cup pick attribution:",
-            components: new ComponentBuilder().WithSelectMenu(menu).Build(),
-            ephemeral: true);
-    }
-
-    [ComponentInteraction("results_league:*:*")]
-    public async Task ResultsLeagueSelected(string seasonIdHex, string raceIdHex, string[] selectedLeagueIds)
-    {
-        var mainData = _data.Load();
-        var s = _data.FindSeasonById(mainData, ByteString.CopyFrom(Convert.FromHexString(seasonIdHex)));
-        var r = s is not null ? _data.FindRaceById(s, ByteString.CopyFrom(Convert.FromHexString(raceIdHex))) : null;
-        var league = _data.FindLeagueById(mainData, ByteString.CopyFrom(Convert.FromHexString(selectedLeagueIds[0])));
-        var component = (SocketMessageComponent)Context.Interaction;
-
-        if (s is null || r is null)
-        {
-            await component.UpdateAsync(m => { m.Content = "That season/race no longer exists."; m.Components = new ComponentBuilder().Build(); });
-            return;
-        }
-
-        var gs = league?.Seasons.FirstOrDefault(gs => gs.SeasonId == s.Id);
-        await component.UpdateAsync(m =>
-        {
-            m.Content = null;
-            m.Embed = BuildResultsEmbed(_data, s, r, gs);
-            m.Components = new ComponentBuilder().Build();
-        });
+        var season = mainData.Seasons.OrderByDescending(s => s.Year).First();
+        var token = _analysisSessions.Start(AnalysisKind.Results, season.Id, Context.User.Id);
+        var session = _analysisSessions.Get(token)!;
+        var components = BuildReadComponents(mainData, token, session, season, disabled: false);
+        await FollowupAsync("Select a season, race, and league, then click Generate:", components: components, ephemeral: true);
     }
 
     // Flags each picked driver with a standings multiplier and an eligibility/scoring emoji —
@@ -243,18 +180,21 @@ public class ReadCommands : InteractionModuleBase<SocketInteractionContext>
     }
 
     [SlashCommand("quali", "Qualifying results for a race")]
-    public async Task Quali(
-        [Summary("season", "Season name or year")] string season,
-        [Summary("race", "Race name or round")] string race)
+    public async Task Quali()
     {
         await DeferAsync(ephemeral: true);
         var mainData = _data.Load();
-        var s = _data.FindSeason(mainData, season);
-        if (s is null) { await FollowupAsync($"Season '{season}' not found.", ephemeral: true); return; }
-        var r = _data.FindRace(s, race);
-        if (r is null) { await FollowupAsync($"Race '{race}' not found.", ephemeral: true); return; }
-        if (r.QualifyingSessions.Count == 0) { await FollowupAsync($"No qualifying data stored for '{r.Name}'.", ephemeral: true); return; }
+        if (mainData.Seasons.Count == 0) { await FollowupAsync("No seasons configured.", ephemeral: true); return; }
 
+        var season = mainData.Seasons.OrderByDescending(s => s.Year).First();
+        var token = _analysisSessions.Start(AnalysisKind.Quali, season.Id, Context.User.Id);
+        var session = _analysisSessions.Get(token)!;
+        var components = BuildReadComponents(mainData, token, session, season, disabled: false);
+        await FollowupAsync("Select a season and race, then click Generate:", components: components, ephemeral: true);
+    }
+
+    internal static Embed BuildQualiEmbed(DataService data, Season s, Race r)
+    {
         var driverMap = s.Drivers.ToDictionary(d => d.Id, d => d);
         var teamMap = s.Teams.ToDictionary(t => t.Id, t => t);
         var allEntries = r.QualifyingSessions
@@ -284,28 +224,31 @@ public class ReadCommands : InteractionModuleBase<SocketInteractionContext>
             })
             .ToList();
 
-        var embed = new EmbedBuilder()
+        return new EmbedBuilder()
             .WithTitle($"Qualifying — {r.Name}")
             .WithDescription($"```\n{string.Join("\n", ordered)}\n```")
-            .WithColor(ToDiscordColor(poleColor));
-        await FollowupAsync(embed: embed.Build(), ephemeral: true);
+            .WithColor(ToDiscordColor(poleColor))
+            .Build();
     }
 
     [SlashCommand("practice", "Practice session results for a race")]
-    public async Task Practice(
-        [Summary("season", "Season name or year")] string season,
-        [Summary("race", "Race name or round")] string race,
-        [Summary("session", "Practice session number (1, 2, or 3)")] int session)
+    public async Task Practice()
     {
         await DeferAsync(ephemeral: true);
         var mainData = _data.Load();
-        var s = _data.FindSeason(mainData, season);
-        if (s is null) { await FollowupAsync($"Season '{season}' not found.", ephemeral: true); return; }
-        var r = _data.FindRace(s, race);
-        if (r is null) { await FollowupAsync($"Race '{race}' not found.", ephemeral: true); return; }
+        if (mainData.Seasons.Count == 0) { await FollowupAsync("No seasons configured.", ephemeral: true); return; }
 
+        var season = mainData.Seasons.OrderByDescending(s => s.Year).First();
+        var token = _analysisSessions.Start(AnalysisKind.Practice, season.Id, Context.User.Id);
+        var session = _analysisSessions.Get(token)!;
+        var components = BuildReadComponents(mainData, token, session, season, disabled: false);
+        await FollowupAsync("Select a season, race, and session, then click Generate:", components: components, ephemeral: true);
+    }
+
+    internal static Embed BuildPracticeEmbed(DataService data, Season s, Race r, int session)
+    {
         var practice = r.Practices.FirstOrDefault(p => p.SessionNumber == session);
-        if (practice is null) { await FollowupAsync($"No FP{session} data stored for '{r.Name}'.", ephemeral: true); return; }
+        if (practice is null) return new EmbedBuilder().WithDescription($"No FP{session} data stored for '{r.Name}'.").Build();
 
         var driverMap = s.Drivers.ToDictionary(d => d.Id, d => d);
         var teamMap = s.Teams.ToDictionary(t => t.Id, t => t);
@@ -327,90 +270,44 @@ public class ReadCommands : InteractionModuleBase<SocketInteractionContext>
             ? (driverMap.GetValueOrDefault(fastestEntries[0].DriverId) is { } fd ? teamMap.GetValueOrDefault(fd.CurrentTeamId)?.Color ?? 0 : 0)
             : 0;
 
-        var embed = new EmbedBuilder()
+        return new EmbedBuilder()
             .WithTitle($"FP{session} — {r.Name}")
             .WithDescription($"```\n{string.Join("\n", rows)}\n```")
-            .WithColor(ToDiscordColor(fastestColor));
-        await FollowupAsync(embed: embed.Build(), ephemeral: true);
-    }
-
-    [SlashCommand("scores", "Cumulative player confidence-cup scores")]
-    public async Task Scores(
-        [Summary("season", "Season name or year")] string season,
-        [Summary("race", "Race name or round (defaults to latest)")] string? race = null,
-        [Summary("league", "League name (optional)")] string? league = null)
-    {
-        await DeferAsync(ephemeral: true);
-        var mainData = _data.Load();
-        var s = _data.FindSeason(mainData, season);
-        if (s is null) { await FollowupAsync($"Season '{season}' not found.", ephemeral: true); return; }
-        var target = race is null ? _data.LatestRace(s) : _data.FindRace(s, race);
-        if (target is null) { await FollowupAsync($"Race '{race}' not found.", ephemeral: true); return; }
-
-        var (_, gs) = _data.FindGameSeason(mainData, s, league);
-        if (gs is null) { await FollowupAsync($"No game season found for '{s.Name}'.", ephemeral: true); return; }
-
-        await FollowupAsync(embed: BuildScoresEmbed(_data, s, gs, target), ephemeral: true);
-    }
-
-    // Shared with BotMcpTools.post_standings (confidence-cup variant) — same reasoning as
-    // BuildStandingsEmbed above.
-    internal static Embed BuildScoresEmbed(DataService data, Season s, GameSeason gs, Race target)
-    {
-        var scores = data.PlayerScores(s, gs, target);
-        var rankedPlayers = gs.ParticipatingPlayers
-            .Select(p => new { p.PlayerName, p.Color, score = scores.GetValueOrDefault(p.Id) })
-            .OrderByDescending(x => x.score)
-            .ToList();
-        var rows = rankedPlayers
-            .Select((x, i) => FormatScoreRow(i + 1, x.PlayerName, x.score))
-            .ToList();
-
-        return new EmbedBuilder()
-            .WithTitle($"Confidence Cup Scores — {s.Name}")
-            .WithDescription($"through {target.Name}\n```\n{string.Join("\n", rows)}\n```")
-            .WithColor(ToDiscordColor(rankedPlayers.FirstOrDefault()?.Color ?? 0))
+            .WithColor(ToDiscordColor(fastestColor))
             .Build();
     }
 
     [SlashCommand("pick", "A player's picks and scores for a race")]
-    public async Task Pick(
-        [Summary("season", "Season name or year")] string season,
-        [Summary("race", "Race name or round")] string race,
-        [Summary("league", "League name (optional)")] string? league = null)
+    public async Task Pick()
     {
         await DeferAsync(ephemeral: true);
         var mainData = _data.Load();
-        var s = _data.FindSeason(mainData, season);
-        if (s is null) { await FollowupAsync($"Season '{season}' not found.", ephemeral: true); return; }
-        var r = _data.FindRace(s, race);
-        if (r is null) { await FollowupAsync($"Race '{race}' not found.", ephemeral: true); return; }
+        if (mainData.Seasons.Count == 0) { await FollowupAsync("No seasons configured.", ephemeral: true); return; }
 
-        var (_, gs) = _data.FindGameSeason(mainData, s, league);
-        if (gs is null) { await FollowupAsync($"No game season found for '{s.Name}'.", ephemeral: true); return; }
+        var season = mainData.Seasons.OrderByDescending(s => s.Year).First();
+        var token = _analysisSessions.Start(AnalysisKind.Pick, season.Id, Context.User.Id);
+        var session = _analysisSessions.Get(token)!;
+        var components = BuildReadComponents(mainData, token, session, season, disabled: false);
+        await FollowupAsync("Select a season, race, and league, then click Generate:", components: components, ephemeral: true);
+    }
 
-        var gameRace = gs.Races.FirstOrDefault(gr => gr.RaceId == r.Id);
-        if (gameRace is null) { await FollowupAsync($"No picks recorded for '{r.Name}'.", ephemeral: true); return; }
-
-        // Other players' picks stay secret until the race has results — otherwise this command
-        // could be used to scout an opponent's picks for a race that hasn't happened yet. Once
-        // there's a result, picks are fair game (the whole point of a post-race recap). This gate
-        // is deliberately only applied here, not inside BuildPickEmbed — BotMcpTools.post_pick_reveal
-        // calls BuildPickEmbed directly with every participating player, for the one intentional
-        // moment (the pick deadline, via the Pick Lock-In skill) that calls for an unconditional reveal.
+    // Applies the pick-secrecy gate: other players' picks stay secret until the race has results —
+    // otherwise this command could be used to scout an opponent's picks for a race that hasn't
+    // happened yet. Once there's a result, picks are fair game. This gate is deliberately only
+    // applied here, not inside BuildPickEmbed — BotMcpTools.post_pick_reveal calls BuildPickEmbed
+    // directly with every participating player, for the one intentional moment (the pick deadline,
+    // via the Pick Lock-In skill) that calls for an unconditional reveal.
+    private IEnumerable<Player> VisiblePlayers(Season s, Race r, GameSeason gs)
+    {
         bool raceDecided = r.RaceResults.Any(rr => rr.IsComplete);
-        var visiblePlayers = gs.ParticipatingPlayers.AsEnumerable();
-        if (!raceDecided)
-        {
-            var usernames = new[] { Context.User.Username, Context.User.GlobalName }
-                .Where(n => !string.IsNullOrEmpty(n))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-            visiblePlayers = gs.ParticipatingPlayers
-                .Where(p => usernames.Any(u => string.Equals(u, p.PlayerName, StringComparison.OrdinalIgnoreCase)));
-        }
+        if (raceDecided) return gs.ParticipatingPlayers;
 
-        await FollowupAsync(embed: BuildPickEmbed(_data, s, gs, r, gameRace, visiblePlayers), ephemeral: true);
+        var usernames = new[] { Context.User.Username, Context.User.GlobalName }
+            .Where(n => !string.IsNullOrEmpty(n))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return gs.ParticipatingPlayers
+            .Where(p => usernames.Any(u => string.Equals(u, p.PlayerName, StringComparison.OrdinalIgnoreCase)));
     }
 
     // Shared with BotMcpTools.post_pick_reveal — see the secrecy-gate comment above for why the
@@ -453,12 +350,9 @@ public class ReadCommands : InteractionModuleBase<SocketInteractionContext>
             .ToList();
 
         var sb = new StringBuilder();
-        var first = true;
         for (int rank = 0; rank < standings.Count; rank++)
         {
             var (playerName, _, total, rows) = standings[rank];
-            if (!first) sb.AppendLine();
-            first = false;
 
             var medal = rank switch { 0 => "🥇", 1 => "🥈", 2 => "🥉", _ => $"{rank + 1,2}." };
             // Player name as real markdown bold, outside the code fence (markdown doesn't render
@@ -483,15 +377,17 @@ public class ReadCommands : InteractionModuleBase<SocketInteractionContext>
     }
 
     [SlashCommand("rules", "Current season points rules and multipliers")]
-    public async Task Rules(
-        [Summary("season", "Season name or year")] string season)
+    public async Task Rules()
     {
         await DeferAsync(ephemeral: true);
         var mainData = _data.Load();
-        var s = _data.FindSeason(mainData, season);
-        if (s is null) { await FollowupAsync($"Season '{season}' not found.", ephemeral: true); return; }
+        if (mainData.Seasons.Count == 0) { await FollowupAsync("No seasons configured.", ephemeral: true); return; }
 
-        await FollowupAsync(embed: BuildRulesEmbed(s), ephemeral: true);
+        var season = mainData.Seasons.OrderByDescending(s => s.Year).First();
+        var token = _analysisSessions.Start(AnalysisKind.Rules, season.Id, Context.User.Id);
+        var session = _analysisSessions.Get(token)!;
+        var components = BuildReadComponents(mainData, token, session, season, disabled: false);
+        await FollowupAsync("Select a season, then click Generate:", components: components, ephemeral: true);
     }
 
     // Shared with BotMcpTools — no automation tool wraps this directly yet, but it follows the
@@ -516,6 +412,145 @@ public class ReadCommands : InteractionModuleBase<SocketInteractionContext>
         }
 
         return new EmbedBuilder().WithTitle($"Points Rules — {s.Name}").WithDescription(sb.ToString()).Build();
+    }
+
+    internal static Embed BuildSeasonStatsEmbed(Season s, Race target, string facts)
+    {
+        var description = facts.Length > MaxDescriptionLength ? facts[..MaxDescriptionLength] + "…" : facts;
+        return new EmbedBuilder()
+            .WithTitle($"Season Stats — {s.Name}")
+            .WithDescription($"through {target.Name}\n```\n{description}\n```")
+            .Build();
+    }
+
+    // Shared with BotMcpTools.post_leaderboard. Renders the top 3 as
+    // medal-marked prose (markdown bold, outside the code fence) and the rest as a ranked code
+    // fence, with a momentum column showing rank change vs. the previous race.
+    internal static Embed BuildLeaderboardEmbed(DataService data, Season s, GameSeason gs, Race target)
+    {
+        var scores = data.PlayerScores(s, gs, target);
+        var ranked = gs.ParticipatingPlayers
+            .Select(p => new { p.PlayerName, p.Color, score = scores.GetValueOrDefault(p.Id) })
+            .OrderByDescending(x => x.score)
+            .ToList();
+
+        // Momentum: rank change vs. the previous race's cumulative standings.
+        var prevRace = s.Races.OrderBy(r => r.Round).LastOrDefault(r => r.Round < target.Round);
+        var prevScores = prevRace is not null ? data.PlayerScores(s, gs, prevRace) : null;
+        var prevRanked = prevScores is not null
+            ? gs.ParticipatingPlayers.Select(p => p.Id).OrderByDescending(id => prevScores.GetValueOrDefault(id)).ToList()
+            : null;
+
+        var sb = new StringBuilder();
+        var medals = new[] { "🥇", "🥈", "🥉" };
+        for (int i = 0; i < ranked.Count; i++)
+        {
+            var p = ranked[i];
+            var momentum = MomentumLabel(prevRanked, gs, p.PlayerName, i + 1);
+            if (i < 3)
+            {
+                sb.AppendLine($"{medals[i]} **{p.PlayerName}** — {p.score:F1} pts {momentum}");
+            }
+            else
+            {
+                sb.AppendLine($"{i + 1,2}. {p.PlayerName} — {p.score:F1} pts {momentum}");
+            }
+        }
+
+        return new EmbedBuilder()
+            .WithTitle($"🏆 Confidence Cup Leaderboard — {s.Name}")
+            .WithDescription($"through {target.Name}\n{sb}")
+            .WithColor(ToDiscordColor(ranked.FirstOrDefault()?.Color ?? 0))
+            .Build();
+    }
+
+    // Returns a compact momentum marker: ↑N / ↓N for rank movement, → for no change, or empty
+    // when there's no prior race to compare against.
+    private static string MomentumLabel(List<ByteString>? prevRanked, GameSeason gs, string playerName, int currentRank)
+    {
+        if (prevRanked is null) return "";
+        var player = gs.ParticipatingPlayers.FirstOrDefault(p => p.PlayerName.Equals(playerName, StringComparison.OrdinalIgnoreCase));
+        if (player is null) return "";
+        var prevIdx = prevRanked.IndexOf(player.Id);
+        if (prevIdx < 0) return "";
+        var prevRank = prevIdx + 1;
+        if (prevRank == currentRank) return "→";
+        return prevRank > currentRank ? $"↑{prevRank - currentRank}" : $"↓{currentRank - prevRank}";
+    }
+
+    internal static Embed BuildCompareEmbed(Season s, Driver d1, Driver d2, Race target, string facts)
+    {
+        return new EmbedBuilder()
+            .WithTitle($"⚔️ {d1.Name} vs {d2.Name}")
+            .WithDescription($"through {target.Name}")
+            .WithFields(ParseFactsFields(facts))
+            .Build();
+    }
+
+    internal static Embed BuildH2HEmbed(Season s, Player p1, Player p2, Race target, string facts)
+    {
+        return new EmbedBuilder()
+            .WithTitle($"⚔️ {p1.PlayerName} vs {p2.PlayerName}")
+            .WithDescription($"through {target.Name}")
+            .WithFields(ParseFactsFields(facts))
+            .Build();
+    }
+
+    internal static Embed BuildTeamCompareEmbed(Season s, Team t1, Team t2, Race target, string facts)
+    {
+        return new EmbedBuilder()
+            .WithTitle($"🏎️ {t1.Name} vs {t2.Name}")
+            .WithDescription($"through {target.Name}")
+            .WithFields(ParseFactsFields(facts))
+            .Build();
+    }
+
+    // Splits a markdown facts block on "**Header**" lines into embed fields, so the static info
+    // renders as clean titled sections rather than one wall-of-text code fence.
+    private static List<EmbedFieldBuilder> ParseFactsFields(string facts)
+    {
+        var fields = new List<EmbedFieldBuilder>();
+        string? currentTitle = null;
+        var currentBody = new StringBuilder();
+
+        void Flush()
+        {
+            if (currentTitle is not null)
+            {
+                var body = currentBody.ToString().Trim();
+                if (body.Length > 0)
+                {
+                    if (body.Length > MaxFieldLength) body = body[..MaxFieldLength] + "…";
+                    fields.Add(new EmbedFieldBuilder().WithName(currentTitle).WithValue(body).WithIsInline(false));
+                }
+            }
+            currentBody.Clear();
+        }
+
+        foreach (var line in facts.Replace("\r\n", "\n").Split('\n'))
+        {
+            var trimmed = line.Trim();
+            if (trimmed.StartsWith("**") && trimmed.EndsWith("**") && trimmed.Length > 4)
+            {
+                Flush();
+                currentTitle = trimmed[2..^2];
+            }
+            else if (currentTitle is not null)
+            {
+                currentBody.AppendLine(line);
+            }
+        }
+        Flush();
+        return fields;
+    }
+
+    internal static Embed BuildProjectedEmbed(Season s, Race nextRace, string facts)
+    {
+        var description = facts.Length > MaxDescriptionLength ? facts[..MaxDescriptionLength] + "…" : facts;
+        return new EmbedBuilder()
+            .WithTitle($"🔮 Projected Standings — {s.Name}")
+            .WithDescription($"```\n{description}\n```")
+            .Build();
     }
 
     private static string FormatLap(float? seconds) =>
@@ -559,15 +594,6 @@ public class ReadCommands : InteractionModuleBase<SocketInteractionContext>
         return $"{rank,2}. {name} {team} {trailing}";
     }
 
-    // Ranked player-score row (no team column); rank 1 gets a trailing crown since bold styling
-    // isn't available inside a code fence.
-    private static string FormatScoreRow(int rank, string playerName, float score)
-    {
-        var name = Truncate(playerName, PlayerNameWidth).PadRight(PlayerNameWidth);
-        var crown = rank == 1 ? " 👑" : "";
-        return $"{rank,2}. {name} {score,6:F1} pts{crown}";
-    }
-
     private static string Truncate(string s, int width) => s.Length <= width ? s : s[..width];
 
     // "Lando Norris" (#4) -> "LN4". Suffixes like "Jr."/"III" are dropped so the last initial
@@ -606,4 +632,242 @@ public class ReadCommands : InteractionModuleBase<SocketInteractionContext>
     // which (unlike ANSI text color) Discord renders identically on every client.
     private static Color ToDiscordColor(uint packedRgb) =>
         packedRgb == 0 ? Color.Default : new Color((byte)((packedRgb >> 16) & 0xFF), (byte)((packedRgb >> 8) & 0xFF), (byte)(packedRgb & 0xFF));
+
+    // ── Read-command dropdown wizard ─────────────────────────────────────────
+    // The six read commands (/standings, /results, /quali, /practice, /pick, /rules) are
+    // parameterless and open an ephemeral dropdown wizard, per the "any command needing structured
+    // input uses a wizard" convention. Unlike the analysis wizard, the result stays ephemeral in
+    // the DM (no public post, no regeneration-keep) — it's a one-shot lookup. Reuses
+    // AnalysisSessionStore for the token/TTL/CallerId machinery and the shared dropdown builders
+    // from AnalysisCommands.
+
+    [ComponentInteraction("read_season:*")]
+    public async Task ReadSeasonSelected(string token, string[] selectedValues)
+    {
+        var component = (SocketMessageComponent)Context.Interaction;
+        var session = _analysisSessions.Get(token);
+        if (session is null) { await ReadExpiredAsync(component); return; }
+        if (Context.User.Id != session.CallerId) { await ReadNotYoursAsync(); return; }
+
+        var mainData = _data.Load();
+        var seasonId = ByteString.CopyFrom(Convert.FromHexString(selectedValues[0]));
+        var season = _data.FindSeasonById(mainData, seasonId);
+        if (season is null) { await ReadGoneAsync(component); return; }
+
+        var updated = session with { SeasonId = seasonId, RaceId = null, LeagueId = null, SessionNumber = null };
+        _analysisSessions.Update(token, updated);
+        await ReadRebuildAsync(component, mainData, token, updated);
+    }
+
+    [ComponentInteraction("read_race:*")]
+    public async Task ReadRaceSelected(string token, string[] selectedValues)
+    {
+        var component = (SocketMessageComponent)Context.Interaction;
+        var session = _analysisSessions.Get(token);
+        if (session is null) { await ReadExpiredAsync(component); return; }
+        if (Context.User.Id != session.CallerId) { await ReadNotYoursAsync(); return; }
+
+        var mainData = _data.Load();
+        var raceId = ByteString.CopyFrom(Convert.FromHexString(selectedValues[0]));
+        var updated = session with { RaceId = raceId };
+        _analysisSessions.Update(token, updated);
+        await ReadRebuildAsync(component, mainData, token, updated);
+    }
+
+    [ComponentInteraction("read_league:*")]
+    public async Task ReadLeagueSelected(string token, string[] selectedValues)
+    {
+        var component = (SocketMessageComponent)Context.Interaction;
+        var session = _analysisSessions.Get(token);
+        if (session is null) { await ReadExpiredAsync(component); return; }
+        if (Context.User.Id != session.CallerId) { await ReadNotYoursAsync(); return; }
+
+        var mainData = _data.Load();
+        var leagueId = ByteString.CopyFrom(Convert.FromHexString(selectedValues[0]));
+        var updated = session with { LeagueId = leagueId };
+        _analysisSessions.Update(token, updated);
+        await ReadRebuildAsync(component, mainData, token, updated);
+    }
+
+    [ComponentInteraction("read_session:*")]
+    public async Task ReadSessionSelected(string token, string[] selectedValues)
+    {
+        var component = (SocketMessageComponent)Context.Interaction;
+        var session = _analysisSessions.Get(token);
+        if (session is null) { await ReadExpiredAsync(component); return; }
+        if (Context.User.Id != session.CallerId) { await ReadNotYoursAsync(); return; }
+
+        var mainData = _data.Load();
+        var updated = session with { SessionNumber = int.Parse(selectedValues[0]) };
+        _analysisSessions.Update(token, updated);
+        await ReadRebuildAsync(component, mainData, token, updated);
+    }
+
+    [ComponentInteraction("read_generate:*")]
+    public async Task ReadGenerate(string token)
+    {
+        var component = (SocketMessageComponent)Context.Interaction;
+        var session = _analysisSessions.Get(token);
+        if (session is null) { await ReadExpiredAsync(component); return; }
+        if (Context.User.Id != session.CallerId) { await ReadNotYoursAsync(); return; }
+
+        var mainData = _data.Load();
+        var s = _data.FindSeasonById(mainData, session.SeasonId);
+        if (s is null) { await ReadGoneAsync(component); return; }
+
+        Embed? embed = null;
+        string? error = null;
+        switch (session.Kind)
+        {
+            case AnalysisKind.Standings:
+            {
+                var target = ResolveReadRace(s, session);
+                if (target is null) { error = "⚠️ No races configured for this season."; break; }
+                var leagueName = ResolveReadLeagueName(mainData, s, session);
+                embed = BuildStandingsEmbed(_data, mainData, s, target, leagueName);
+                break;
+            }
+            case AnalysisKind.Results:
+            {
+                var target = ResolveReadRace(s, session);
+                if (target is null) { error = "⚠️ No races configured for this season."; break; }
+                if (target.RaceResults.Count == 0) { error = $"No race results stored for '{target.Name}'."; break; }
+                var gs = ResolveReadGameSeason(mainData, s, session);
+                embed = BuildResultsEmbed(_data, s, target, gs);
+                break;
+            }
+            case AnalysisKind.Quali:
+            {
+                var target = ResolveReadRace(s, session);
+                if (target is null) { error = "⚠️ No races configured for this season."; break; }
+                if (target.QualifyingSessions.Count == 0) { error = $"No qualifying data stored for '{target.Name}'."; break; }
+                embed = BuildQualiEmbed(_data, s, target);
+                break;
+            }
+            case AnalysisKind.Practice:
+            {
+                var target = ResolveReadRace(s, session);
+                if (target is null) { error = "⚠️ No races configured for this season."; break; }
+                if (session.SessionNumber is not { } sn) { error = "⚠️ Select a practice session before clicking Generate."; break; }
+                embed = BuildPracticeEmbed(_data, s, target, sn);
+                break;
+            }
+            case AnalysisKind.Pick:
+            {
+                var target = ResolveReadRace(s, session);
+                if (target is null) { error = "⚠️ No races configured for this season."; break; }
+                var gs = ResolveReadGameSeason(mainData, s, session);
+                if (gs is null) { error = $"No game season found for '{s.Name}'."; break; }
+                var gameRace = gs.Races.FirstOrDefault(gr => gr.RaceId == target.Id);
+                if (gameRace is null) { error = $"No picks recorded for '{target.Name}'."; break; }
+                embed = BuildPickEmbed(_data, s, gs, target, gameRace, VisiblePlayers(s, target, gs));
+                break;
+            }
+            case AnalysisKind.Rules:
+                embed = BuildRulesEmbed(s);
+                break;
+            default:
+                return;
+        }
+
+        if (error is not null)
+        {
+            await component.UpdateAsync(m => { m.Content = error; m.Components = new ComponentBuilder().Build(); });
+            return;
+        }
+
+        // Ephemeral one-shot result: replace the wizard with the embed, no public post.
+        await component.UpdateAsync(m => { m.Content = null; m.Embed = embed; m.Components = new ComponentBuilder().Build(); });
+        _analysisSessions.Remove(token);
+    }
+
+    // Renders the dropdowns + Generate button for the read wizard. The sequence depends on the
+    // kind; the league dropdown only appears when the season has more than one configured league
+    // (0 or 1 auto-resolve silently, same convention as the analysis wizard).
+    private MessageComponent BuildReadComponents(
+        MainData mainData, string token, AnalysisSession session, Season season, bool disabled)
+    {
+        var menus = new List<SelectMenuBuilder>();
+        menus.Add(AnalysisCommands.BuildSeasonMenu("read_season", token, mainData, season));
+
+        var leagueOptions = _data.LeaguesForSeason(mainData, season);
+        ByteString? resolvedLeagueId = leagueOptions.Count == 1 ? leagueOptions[0].league.Id : session.LeagueId;
+
+        switch (session.Kind)
+        {
+            case AnalysisKind.Rules:
+                break;
+            case AnalysisKind.Quali:
+                menus.Add(AnalysisCommands.BuildRaceMenu(token, season, session.RaceId, _data.LatestRace(season)?.Id));
+                break;
+            case AnalysisKind.Practice:
+                menus.Add(AnalysisCommands.BuildRaceMenu(token, season, session.RaceId, _data.LatestRace(season)?.Id));
+                menus.Add(BuildSessionMenu(token, session.SessionNumber));
+                break;
+            case AnalysisKind.Standings:
+            case AnalysisKind.Results:
+            case AnalysisKind.Pick:
+                menus.Add(AnalysisCommands.BuildRaceMenu(token, season, session.RaceId, _data.LatestRace(season)?.Id));
+                if (leagueOptions.Count > 1) menus.Add(AnalysisCommands.BuildLeagueMenu(token, leagueOptions, resolvedLeagueId));
+                break;
+        }
+
+        var builder = new ComponentBuilder();
+        for (int i = 0; i < menus.Count; i++)
+            builder.WithSelectMenu(menus[i], row: i);
+        builder.WithButton("📊 Generate", $"read_generate:{token}", ButtonStyle.Primary, row: menus.Count, disabled: disabled);
+        return builder.Build();
+    }
+
+    private static SelectMenuBuilder BuildSessionMenu(string token, int? sessionNumber)
+    {
+        var menu = new SelectMenuBuilder()
+            .WithCustomId($"read_session:{token}")
+            .WithPlaceholder("Choose a practice session")
+            .WithMinValues(1)
+            .WithMaxValues(1);
+        for (int i = 1; i <= 3; i++)
+            menu.AddOption($"FP{i}", i.ToString(), isDefault: sessionNumber == i);
+        return menu;
+    }
+
+    private Race? ResolveReadRace(Season s, AnalysisSession session) =>
+        session.RaceId is { } rid ? s.Races.FirstOrDefault(r => r.Id == rid)
+            : _data.LatestRace(s) ?? s.Races.OrderBy(r => r.Round).FirstOrDefault();
+
+    private GameSeason? ResolveReadGameSeason(MainData mainData, Season s, AnalysisSession session)
+    {
+        if (session.LeagueId is { } lid)
+        {
+            var league = _data.FindLeagueById(mainData, lid);
+            return league?.Seasons.FirstOrDefault(x => x.SeasonId == s.Id);
+        }
+        var options = _data.LeaguesForSeason(mainData, s);
+        return options.Count == 1 ? options[0].gs : null;
+    }
+
+    private string? ResolveReadLeagueName(MainData mainData, Season s, AnalysisSession session)
+    {
+        if (session.LeagueId is { } lid)
+            return _data.FindLeagueById(mainData, lid)?.LeagueName;
+        var options = _data.LeaguesForSeason(mainData, s);
+        return options.Count == 1 ? options[0].league.LeagueName : null;
+    }
+
+    private async Task ReadRebuildAsync(SocketMessageComponent component, MainData mainData, string token, AnalysisSession session)
+    {
+        var season = _data.FindSeasonById(mainData, session.SeasonId);
+        if (season is null) { await ReadGoneAsync(component); return; }
+        var components = BuildReadComponents(mainData, token, session, season, disabled: false);
+        await component.UpdateAsync(m => { m.Components = components; });
+    }
+
+    private static async Task ReadExpiredAsync(SocketMessageComponent component) =>
+        await component.UpdateAsync(m => { m.Content = "This session expired — run the command again."; m.Components = new ComponentBuilder().Build(); });
+
+    private static async Task ReadGoneAsync(SocketMessageComponent component) =>
+        await component.UpdateAsync(m => { m.Content = "That season no longer exists."; m.Components = new ComponentBuilder().Build(); });
+
+    private async Task ReadNotYoursAsync() =>
+        await RespondAsync("This isn't your session — run the command yourself.", ephemeral: true);
 }

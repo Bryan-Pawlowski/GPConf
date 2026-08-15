@@ -57,7 +57,7 @@ Manufacturer/Team/Driver CRUD, all season-scoped: `UpsertManufacturer`,
 (manufacturer/team) to already exist — they return an error string rather
 than auto-creating it.
 
-### `Tools/RaceTools.cs` (**modified in working tree**)
+### `Tools/RaceTools.cs`
 
 | Tool | Params | Does |
 |---|---|---|
@@ -89,6 +89,7 @@ Read-only, all return JSON:
 | `GetPlayerPicks` | Each player's picks + computed confidence-cup score for a race; "preview" (pre-race) scoring if the race has no complete result yet, real scoring once it does |
 | `GetPlayerScores` | Cumulative player confidence-cup scores, round 1 → given race |
 | `GetPlayerRankings` | Same as above, ranked |
+| `GetPickEligibility` | **New.** Returns the active `PickRules` (`NumPicks`, `PositionCutoff`, `BasePickScores`, `StandingsMultipliers`), the upcoming (undecided) race, the **ineligible** drivers (ranked `P1…PositionCutoff`, never pickable), and the **eligible** driver pool with each driver's standings multiplier — the single authoritative source for "who can be picked" so callers (e.g. `race-weekend-prep`'s intro) never recommend an ineligible driver |
 
 **This file used to have its own copy of the pick-scoring logic** (with a
 hardcoded "sprint = 0.5×, detected by `race_name.Contains("sprint")`"

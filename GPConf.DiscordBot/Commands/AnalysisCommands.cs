@@ -68,6 +68,18 @@ public class AnalysisCommands : InteractionModuleBase<SocketInteractionContext>
     [
         ("Race Summary", "🏁"), ("Unexpected Performances", "😲"), ("Confidence Cup This Week", "🎯"),
     ];
+    private static readonly (string label, string emoji)[] TeamSections =
+    [
+        ("Team Overview", "🏎️"), ("Driver Partnership", "🤝"), ("Strengths & Weaknesses", "⚖️"), ("What's Next", "🔮"),
+    ];
+    private static readonly (string label, string emoji)[] CompareSections =
+    [
+        ("Head-to-Head", "⚔️"), ("Key Differences", "🔍"), ("Performance Indicators", "📊"), ("Outlook", "🔮"),
+    ];
+    private static readonly (string label, string emoji)[] H2HSections =
+    [
+        ("Head-to-Head", "⚔️"), ("Key Differences", "🔍"), ("Performance Indicators", "📊"), ("Outlook", "🔮"),
+    ];
 
     private readonly DataService _data;
     private readonly OllamaClient _ollama;
@@ -86,6 +98,12 @@ public class AnalysisCommands : InteractionModuleBase<SocketInteractionContext>
         AnalysisKind.Player => "Select a season, league, player, and race, then click Generate:",
         AnalysisKind.Season => "Select a season, league, and race, then click Generate:",
         AnalysisKind.Recap => "Select a season, race, and league, then click Generate:",
+        AnalysisKind.Team => "Select a season, two teams, and a league, then click Generate:",
+        AnalysisKind.SeasonStats => "Select a season, race, and league, then click Generate:",
+        AnalysisKind.Leaderboard => "Select a season, race, and league, then click Generate:",
+        AnalysisKind.Compare => "Select a season, two drivers, and a race, then click Generate:",
+        AnalysisKind.H2H => "Select a season, league, two players, and a race, then click Generate:",
+        AnalysisKind.Projected => "Select a season and league, then click Generate:",
         _ => "Select the options, then click Generate:",
     };
 
@@ -177,6 +195,127 @@ public class AnalysisCommands : InteractionModuleBase<SocketInteractionContext>
         await FollowupAsync(WizardPrompt(AnalysisKind.Recap), components: components, ephemeral: true);
     }
 
+    [SlashCommand("team-analysis", "AI-generated narrative analysis of a team's season")]
+    public async Task TeamAnalysis()
+    {
+        await DeferAsync(ephemeral: true);
+        var mainData = _data.Load();
+        if (mainData.Seasons.Count == 0) { await FollowupAsync("No seasons configured.", ephemeral: true); return; }
+
+        var season = mainData.Seasons.OrderByDescending(s => s.Year).First();
+        var token = _analysisSessions.Start(AnalysisKind.Team, season.Id, Context.User.Id);
+        var session = _analysisSessions.Get(token)!;
+        var leagueOptions = _data.LeaguesForSeason(mainData, season);
+        if (leagueOptions.Count == 1)
+        {
+            session = session with { LeagueId = leagueOptions[0].league.Id };
+            _analysisSessions.Update(token, session);
+        }
+
+        var components = BuildAnalysisComponents(mainData, token, session, season, leagueOptions, disabled: false);
+        await FollowupAsync(WizardPrompt(AnalysisKind.Team), components: components, ephemeral: true);
+    }
+
+    [SlashCommand("season-stats", "Deterministic season statistics dashboard")]
+    public async Task SeasonStats()
+    {
+        await DeferAsync(ephemeral: true);
+        var mainData = _data.Load();
+        if (mainData.Seasons.Count == 0) { await FollowupAsync("No seasons configured.", ephemeral: true); return; }
+
+        var season = mainData.Seasons.OrderByDescending(s => s.Year).First();
+        var token = _analysisSessions.Start(AnalysisKind.SeasonStats, season.Id, Context.User.Id);
+        var session = _analysisSessions.Get(token)!;
+        var leagueOptions = _data.LeaguesForSeason(mainData, season);
+        if (leagueOptions.Count == 1)
+        {
+            session = session with { LeagueId = leagueOptions[0].league.Id };
+            _analysisSessions.Update(token, session);
+        }
+
+        var components = BuildAnalysisComponents(mainData, token, session, season, leagueOptions, disabled: false);
+        await FollowupAsync(WizardPrompt(AnalysisKind.SeasonStats), components: components, ephemeral: true);
+    }
+
+    [SlashCommand("leaderboard", "Confidence-cup leaderboard with momentum indicators")]
+    public async Task Leaderboard()
+    {
+        await DeferAsync(ephemeral: true);
+        var mainData = _data.Load();
+        if (mainData.Seasons.Count == 0) { await FollowupAsync("No seasons configured.", ephemeral: true); return; }
+
+        var season = mainData.Seasons.OrderByDescending(s => s.Year).First();
+        var token = _analysisSessions.Start(AnalysisKind.Leaderboard, season.Id, Context.User.Id);
+        var session = _analysisSessions.Get(token)!;
+        var leagueOptions = _data.LeaguesForSeason(mainData, season);
+        if (leagueOptions.Count == 1)
+        {
+            session = session with { LeagueId = leagueOptions[0].league.Id };
+            _analysisSessions.Update(token, session);
+        }
+
+        var components = BuildAnalysisComponents(mainData, token, session, season, leagueOptions, disabled: false);
+        await FollowupAsync(WizardPrompt(AnalysisKind.Leaderboard), components: components, ephemeral: true);
+    }
+
+    [SlashCommand("compare", "Head-to-head statistics between two drivers")]
+    public async Task Compare()
+    {
+        await DeferAsync(ephemeral: true);
+        var mainData = _data.Load();
+        if (mainData.Seasons.Count == 0) { await FollowupAsync("No seasons configured.", ephemeral: true); return; }
+
+        var season = mainData.Seasons.OrderByDescending(s => s.Year).First();
+        var token = _analysisSessions.Start(AnalysisKind.Compare, season.Id, Context.User.Id);
+        var session = _analysisSessions.Get(token)!;
+        var leagueOptions = _data.LeaguesForSeason(mainData, season);
+
+        var components = BuildAnalysisComponents(mainData, token, session, season, leagueOptions, disabled: false);
+        await FollowupAsync(WizardPrompt(AnalysisKind.Compare), components: components, ephemeral: true);
+    }
+
+    [SlashCommand("h2h", "Head-to-head comparison between two confidence-cup players")]
+    public async Task H2H()
+    {
+        await DeferAsync(ephemeral: true);
+        var mainData = _data.Load();
+        if (mainData.Seasons.Count == 0) { await FollowupAsync("No seasons configured.", ephemeral: true); return; }
+
+        var season = mainData.Seasons.OrderByDescending(s => s.Year).First();
+        var token = _analysisSessions.Start(AnalysisKind.H2H, season.Id, Context.User.Id);
+        var session = _analysisSessions.Get(token)!;
+        var leagueOptions = _data.LeaguesForSeason(mainData, season);
+        if (leagueOptions.Count == 1)
+        {
+            session = session with { LeagueId = leagueOptions[0].league.Id };
+            _analysisSessions.Update(token, session);
+        }
+
+        var components = BuildAnalysisComponents(mainData, token, session, season, leagueOptions, disabled: false);
+        await FollowupAsync(WizardPrompt(AnalysisKind.H2H), components: components, ephemeral: true);
+    }
+
+    [SlashCommand("projected", "Projected confidence-cup standings after the next race")]
+    public async Task Projected()
+    {
+        await DeferAsync(ephemeral: true);
+        var mainData = _data.Load();
+        if (mainData.Seasons.Count == 0) { await FollowupAsync("No seasons configured.", ephemeral: true); return; }
+
+        var season = mainData.Seasons.OrderByDescending(s => s.Year).First();
+        var token = _analysisSessions.Start(AnalysisKind.Projected, season.Id, Context.User.Id);
+        var session = _analysisSessions.Get(token)!;
+        var leagueOptions = _data.LeaguesForSeason(mainData, season);
+        if (leagueOptions.Count == 1)
+        {
+            session = session with { LeagueId = leagueOptions[0].league.Id };
+            _analysisSessions.Update(token, session);
+        }
+
+        var components = BuildAnalysisComponents(mainData, token, session, season, leagueOptions, disabled: false);
+        await FollowupAsync(WizardPrompt(AnalysisKind.Projected), components: components, ephemeral: true);
+    }
+
     [ComponentInteraction("analysis_season:*")]
     public async Task AnalysisSeasonSelected(string token, string[] selectedValues)
     {
@@ -194,7 +333,7 @@ public class AnalysisCommands : InteractionModuleBase<SocketInteractionContext>
         // fresh rather than carrying stale IDs from a different season's roster.
         var leagueOptions = _data.LeaguesForSeason(mainData, season);
         ByteString? leagueId = leagueOptions.Count == 1 ? leagueOptions[0].league.Id : null;
-        var updated = session with { SeasonId = seasonId, DriverId = null, LeagueId = leagueId, PlayerName = null, RaceId = null };
+        var updated = session with { SeasonId = seasonId, DriverId = null, LeagueId = leagueId, PlayerName = null, RaceId = null, TeamId = null, Driver2Id = null, Player2Name = null, Team2Id = null };
         _analysisSessions.Update(token, updated);
         await RebuildAsync(component, mainData, token, updated);
     }
@@ -210,6 +349,36 @@ public class AnalysisCommands : InteractionModuleBase<SocketInteractionContext>
         var mainData = _data.Load();
         var driverId = ByteString.CopyFrom(Convert.FromHexString(selectedValues[0]));
         var updated = session with { DriverId = driverId };
+        _analysisSessions.Update(token, updated);
+        await RebuildAsync(component, mainData, token, updated);
+    }
+
+    [ComponentInteraction("analysis_team:*")]
+    public async Task AnalysisTeamSelected(string token, string[] selectedValues)
+    {
+        var component = (SocketMessageComponent)Context.Interaction;
+        var session = _analysisSessions.Get(token);
+        if (session is null) { await ExpiredAsync(component); return; }
+        if (Context.User.Id != session.CallerId) { await NotYoursAsync(); return; }
+
+        var mainData = _data.Load();
+        var teamId = ByteString.CopyFrom(Convert.FromHexString(selectedValues[0]));
+        var updated = session with { TeamId = teamId };
+        _analysisSessions.Update(token, updated);
+        await RebuildAsync(component, mainData, token, updated);
+    }
+
+    [ComponentInteraction("analysis_team2:*")]
+    public async Task AnalysisTeam2Selected(string token, string[] selectedValues)
+    {
+        var component = (SocketMessageComponent)Context.Interaction;
+        var session = _analysisSessions.Get(token);
+        if (session is null) { await ExpiredAsync(component); return; }
+        if (Context.User.Id != session.CallerId) { await NotYoursAsync(); return; }
+
+        var mainData = _data.Load();
+        var teamId = ByteString.CopyFrom(Convert.FromHexString(selectedValues[0]));
+        var updated = session with { Team2Id = teamId };
         _analysisSessions.Update(token, updated);
         await RebuildAsync(component, mainData, token, updated);
     }
@@ -245,6 +414,36 @@ public class AnalysisCommands : InteractionModuleBase<SocketInteractionContext>
         await RebuildAsync(component, mainData, token, updated);
     }
 
+    [ComponentInteraction("analysis_driver2:*")]
+    public async Task AnalysisDriver2Selected(string token, string[] selectedValues)
+    {
+        var component = (SocketMessageComponent)Context.Interaction;
+        var session = _analysisSessions.Get(token);
+        if (session is null) { await ExpiredAsync(component); return; }
+        if (Context.User.Id != session.CallerId) { await NotYoursAsync(); return; }
+
+        var mainData = _data.Load();
+        var driverId = ByteString.CopyFrom(Convert.FromHexString(selectedValues[0]));
+        var updated = session with { Driver2Id = driverId };
+        _analysisSessions.Update(token, updated);
+        await RebuildAsync(component, mainData, token, updated);
+    }
+
+    [ComponentInteraction("analysis_player2:*")]
+    public async Task AnalysisPlayer2Selected(string token, string[] selectedValues)
+    {
+        var component = (SocketMessageComponent)Context.Interaction;
+        var session = _analysisSessions.Get(token);
+        if (session is null) { await ExpiredAsync(component); return; }
+        if (Context.User.Id != session.CallerId) { await NotYoursAsync(); return; }
+
+        var mainData = _data.Load();
+        var playerName = Encoding.UTF8.GetString(Convert.FromHexString(selectedValues[0]));
+        var updated = session with { Player2Name = playerName };
+        _analysisSessions.Update(token, updated);
+        await RebuildAsync(component, mainData, token, updated);
+    }
+
     [ComponentInteraction("analysis_race:*")]
     public async Task AnalysisRaceSelected(string token, string[] selectedValues)
     {
@@ -272,10 +471,11 @@ public class AnalysisCommands : InteractionModuleBase<SocketInteractionContext>
         var s = _data.FindSeasonById(mainData, session.SeasonId);
         if (s is null) { await GoneAsync(component); return; }
 
-        string title;
-        string userPrompt;
-        uint color;
-        (string label, string emoji)[] sections;
+        string title = "";
+        string userPrompt = "";
+        uint color = 0;
+        (string label, string emoji)[] sections = [];
+        Embed? embed = null;
         switch (session.Kind)
         {
             case AnalysisKind.Driver:
@@ -334,6 +534,93 @@ public class AnalysisCommands : InteractionModuleBase<SocketInteractionContext>
                 userPrompt = $"Write a recap of the {target.Name} race weekend, highlighting unexpected driver performances and confidence-cup winners/losers for the week.\n\n{facts}";
                 break;
             }
+            case AnalysisKind.Team:
+            {
+                var t1 = session.TeamId is { } tid ? s.Teams.FirstOrDefault(x => x.Id == tid) : null;
+                if (t1 is null) { await component.UpdateAsync(m => m.Content = "⚠️ Select the first team before clicking Generate."); return; }
+                var t2 = session.Team2Id is { } t2id ? s.Teams.FirstOrDefault(x => x.Id == t2id) : null;
+                if (t2 is null) { await component.UpdateAsync(m => m.Content = "⚠️ Select the second team before clicking Generate."); return; }
+                var target = _data.LatestRace(s) ?? s.Races.OrderBy(r => r.Round).FirstOrDefault();
+                if (target is null) { await component.UpdateAsync(m => m.Content = "⚠️ No races configured for this season."); return; }
+                var (league, gs) = ResolveLeague(session, mainData, s);
+                var facts = AnalysisFacts.BuildTeamCompareFacts(_data, s, t1, t2, target, league, gs);
+                embed = ReadCommands.BuildTeamCompareEmbed(s, t1, t2, target, facts);
+                title = $"Team Comparison — {t1.Name} vs {t2.Name}";
+                color = t1.Color;
+                sections = TeamSections;
+                userPrompt = $"Write a narrative comparison of {t1.Name} and {t2.Name} in {s.Name} through {target.Name}, " +
+                    $"highlighting the noteworthy differences between the two teams, their driver partnerships, and key performance indicators. " +
+                    $"Include a GPConf confidence-cup outlook grounded in the league's pick-eligibility rules.\n\n{facts}";
+                break;
+            }
+            case AnalysisKind.SeasonStats:
+            {
+                var target = ResolveRace(s, session);
+                if (target is null) { await component.UpdateAsync(m => m.Content = "⚠️ No races configured for this season."); return; }
+                var (league, gs) = ResolveLeague(session, mainData, s);
+                var leagueObj = gs is not null ? _data.LeaguesForSeason(mainData, s).FirstOrDefault(x => x.gs == gs).league : null;
+                var facts = AnalysisFacts.BuildSeasonStatsFacts(_data, s, target, leagueObj, gs);
+                embed = ReadCommands.BuildSeasonStatsEmbed(s, target, facts);
+                break;
+            }
+            case AnalysisKind.Leaderboard:
+            {
+                var (_, gs) = ResolveLeague(session, mainData, s);
+                if (gs is null) { await component.UpdateAsync(m => m.Content = "⚠️ Select a league before clicking Generate."); return; }
+                var target = ResolveRace(s, session);
+                if (target is null) { await component.UpdateAsync(m => m.Content = "⚠️ No races configured for this season."); return; }
+                embed = ReadCommands.BuildLeaderboardEmbed(_data, s, gs, target);
+                break;
+            }
+            case AnalysisKind.Compare:
+            {
+                var d1 = session.DriverId is { } did ? s.Drivers.FirstOrDefault(x => x.Id == did) : null;
+                if (d1 is null) { await component.UpdateAsync(m => m.Content = "⚠️ Select the first driver before clicking Generate."); return; }
+                var d2 = session.Driver2Id is { } d2id ? s.Drivers.FirstOrDefault(x => x.Id == d2id) : null;
+                if (d2 is null) { await component.UpdateAsync(m => m.Content = "⚠️ Select the second driver before clicking Generate."); return; }
+                var target = ResolveRace(s, session);
+                if (target is null) { await component.UpdateAsync(m => m.Content = "⚠️ No races configured for this season."); return; }
+                var facts = AnalysisFacts.BuildCompareFacts(_data, s, d1, d2, target);
+                embed = ReadCommands.BuildCompareEmbed(s, d1, d2, target, facts);
+                title = $"Driver Comparison — {d1.Name} vs {d2.Name}";
+                color = 0;
+                sections = CompareSections;
+                userPrompt = $"Write a narrative comparison of {d1.Name} and {d2.Name} in {s.Name} through {target.Name}, " +
+                    $"highlighting the noteworthy differences between the two drivers and their key performance indicators. " +
+                    $"Discuss their practice, qualifying, and race pace — the pace differences between them and how those factor into their results.\n\n{facts}";
+                break;
+            }
+            case AnalysisKind.H2H:
+            {
+                var (_, gs) = ResolveLeague(session, mainData, s);
+                if (gs is null) { await component.UpdateAsync(m => m.Content = "⚠️ Select a league before clicking Generate."); return; }
+                if (session.PlayerName is not { } p1name) { await component.UpdateAsync(m => m.Content = "⚠️ Select the first player before clicking Generate."); return; }
+                if (session.Player2Name is not { } p2name) { await component.UpdateAsync(m => m.Content = "⚠️ Select the second player before clicking Generate."); return; }
+                var p1 = gs.ParticipatingPlayers.FirstOrDefault(p => p.PlayerName.Equals(p1name, StringComparison.OrdinalIgnoreCase));
+                if (p1 is null) { await component.UpdateAsync(m => m.Content = "⚠️ That player no longer exists in the selected league."); return; }
+                var p2 = gs.ParticipatingPlayers.FirstOrDefault(p => p.PlayerName.Equals(p2name, StringComparison.OrdinalIgnoreCase));
+                if (p2 is null) { await component.UpdateAsync(m => m.Content = "⚠️ That player no longer exists in the selected league."); return; }
+                var target = ResolveRace(s, session);
+                if (target is null) { await component.UpdateAsync(m => m.Content = "⚠️ No races configured for this season."); return; }
+                var facts = AnalysisFacts.BuildH2HFacts(_data, s, gs, p1, p2, target);
+                embed = ReadCommands.BuildH2HEmbed(s, p1, p2, target, facts);
+                title = $"Player Comparison — {p1.PlayerName} vs {p2.PlayerName}";
+                color = p1.Color;
+                sections = H2HSections;
+                userPrompt = $"Write a narrative comparison of {p1.PlayerName} and {p2.PlayerName}'s confidence-cup performance in {s.Name} through {target.Name}, " +
+                    $"highlighting the noteworthy differences between the two players and their key performance indicators.\n\n{facts}";
+                break;
+            }
+            case AnalysisKind.Projected:
+            {
+                var (_, gs) = ResolveLeague(session, mainData, s);
+                if (gs is null) { await component.UpdateAsync(m => m.Content = "⚠️ Select a league before clicking Generate."); return; }
+                var nextRace = _data.NextPickableRace(s);
+                if (nextRace is null) { await component.UpdateAsync(m => m.Content = "⚠️ No upcoming pickable race found."); return; }
+                var facts = AnalysisFacts.BuildProjectedFacts(_data, s, gs, nextRace);
+                embed = ReadCommands.BuildProjectedEmbed(s, nextRace, facts);
+                break;
+            }
             default:
                 return;
         }
@@ -345,7 +632,15 @@ public class AnalysisCommands : InteractionModuleBase<SocketInteractionContext>
         var disabledComponents = BuildAnalysisComponents(mainData, token, session, s, leagueOptions, disabled: true);
         await component.UpdateAsync(m => { m.Content = "Generating…"; m.Components = disabledComponents; });
 
-        var (embed, error) = await GenerateEmbedAsync(title, userPrompt, color, sections);
+        // Comparison kinds (Team/Compare/H2H) build a static embed in the switch AND set an AI
+        // prompt — they post both. Pure deterministic kinds (season-stats, leaderboard, projected)
+        // build only the static embed. Pure LLM kinds (driver/player/season/recap) build only the
+        // AI analysis. `embed` non-null means a static embed is ready; `userPrompt` non-empty means
+        // an AI analysis is wanted.
+        string? error = null;
+        Embed? analysisEmbed = null;
+        if (userPrompt.Length > 0)
+            (analysisEmbed, error) = await GenerateEmbedAsync(title, userPrompt, color, sections);
 
         if (error is not null)
         {
@@ -367,7 +662,12 @@ public class AnalysisCommands : InteractionModuleBase<SocketInteractionContext>
         {
             var restChannel = await Context.Client.Rest.GetChannelAsync(channelId) as IMessageChannel;
             if (restChannel is not null)
-                await restChannel.SendMessageAsync(embed: embed);
+            {
+                if (embed is not null)
+                    await restChannel.SendMessageAsync(embed: embed);
+                if (analysisEmbed is not null)
+                    await restChannel.SendMessageAsync(embed: analysisEmbed);
+            }
         }
         var reenabled2 = BuildAnalysisComponents(mainData, token, session, s, leagueOptions, disabled: false);
         await component.ModifyOriginalResponseAsync(m => { m.Content = WizardPrompt(session.Kind); m.Components = reenabled2; });
@@ -419,18 +719,7 @@ public class AnalysisCommands : InteractionModuleBase<SocketInteractionContext>
     {
         var menus = new List<SelectMenuBuilder>();
 
-        var seasonMenu = new SelectMenuBuilder()
-            .WithCustomId($"analysis_season:{token}")
-            .WithPlaceholder("Choose a season")
-            .WithMinValues(1)
-            .WithMaxValues(1);
-        foreach (var candidate in mainData.Seasons.OrderByDescending(x => x.Year).Take(25))
-        {
-            var label = string.IsNullOrWhiteSpace(candidate.Name) ? $"Season {candidate.Year}" : candidate.Name;
-            seasonMenu.AddOption(label, Convert.ToHexString(candidate.Id.ToByteArray()), candidate.Year.ToString(),
-                isDefault: candidate.Id == season.Id);
-        }
-        menus.Add(seasonMenu);
+        menus.Add(BuildSeasonMenu("analysis_season", token, mainData, season));
 
         ByteString? resolvedLeagueId = leagueOptions.Count == 1 ? leagueOptions[0].league.Id : session.LeagueId;
 
@@ -447,14 +736,45 @@ public class AnalysisCommands : InteractionModuleBase<SocketInteractionContext>
                     var gs = leagueOptions.FirstOrDefault(o => o.league.Id == lid).gs;
                     menus.Add(BuildPlayerMenu(token, gs, session.PlayerName));
                 }
-                menus.Add(BuildRaceMenu(token, season, session.RaceId));
+                menus.Add(BuildRaceMenu(token, season, session.RaceId, _data.LatestRace(season)?.Id));
                 break;
             case AnalysisKind.Season:
                 if (leagueOptions.Count > 1) menus.Add(BuildLeagueMenu(token, leagueOptions, resolvedLeagueId));
-                menus.Add(BuildRaceMenu(token, season, session.RaceId));
+                menus.Add(BuildRaceMenu(token, season, session.RaceId, _data.LatestRace(season)?.Id));
                 break;
             case AnalysisKind.Recap:
-                menus.Add(BuildRaceMenu(token, season, session.RaceId));
+                menus.Add(BuildRaceMenu(token, season, session.RaceId, _data.LatestRace(season)?.Id));
+                if (leagueOptions.Count > 1) menus.Add(BuildLeagueMenu(token, leagueOptions, resolvedLeagueId));
+                break;
+            case AnalysisKind.Team:
+                menus.Add(BuildTeamMenu(token, season, session.TeamId));
+                menus.Add(BuildTeam2Menu(token, season, session.Team2Id));
+                if (leagueOptions.Count > 1) menus.Add(BuildLeagueMenu(token, leagueOptions, resolvedLeagueId));
+                break;
+            case AnalysisKind.SeasonStats:
+                if (leagueOptions.Count > 1) menus.Add(BuildLeagueMenu(token, leagueOptions, resolvedLeagueId));
+                menus.Add(BuildRaceMenu(token, season, session.RaceId, _data.LatestRace(season)?.Id));
+                break;
+            case AnalysisKind.Leaderboard:
+                if (leagueOptions.Count > 1) menus.Add(BuildLeagueMenu(token, leagueOptions, resolvedLeagueId));
+                menus.Add(BuildRaceMenu(token, season, session.RaceId, _data.LatestRace(season)?.Id));
+                break;
+            case AnalysisKind.Compare:
+                menus.Add(BuildDriverMenu(token, season, session.DriverId));
+                menus.Add(BuildDriver2Menu(token, season, session.Driver2Id));
+                menus.Add(BuildRaceMenu(token, season, session.RaceId, _data.LatestRace(season)?.Id));
+                break;
+            case AnalysisKind.H2H:
+                if (leagueOptions.Count > 1) menus.Add(BuildLeagueMenu(token, leagueOptions, resolvedLeagueId));
+                if (resolvedLeagueId is { } h2hLid)
+                {
+                    var gs = leagueOptions.FirstOrDefault(o => o.league.Id == h2hLid).gs;
+                    menus.Add(BuildPlayerMenu(token, gs, session.PlayerName));
+                    menus.Add(BuildPlayer2Menu(token, gs, session.Player2Name));
+                }
+                menus.Add(BuildRaceMenu(token, season, session.RaceId, _data.LatestRace(season)?.Id));
+                break;
+            case AnalysisKind.Projected:
                 if (leagueOptions.Count > 1) menus.Add(BuildLeagueMenu(token, leagueOptions, resolvedLeagueId));
                 break;
         }
@@ -492,7 +812,73 @@ public class AnalysisCommands : InteractionModuleBase<SocketInteractionContext>
         return menu;
     }
 
-    private static SelectMenuBuilder BuildLeagueMenu(string token, List<(League league, GameSeason gs)> leagueOptions, ByteString? leagueId)
+    private static SelectMenuBuilder BuildTeamMenu(string token, Season season, ByteString? teamId)
+    {
+        var menu = new SelectMenuBuilder()
+            .WithCustomId($"analysis_team:{token}")
+            .WithPlaceholder("Choose a team")
+            .WithMinValues(1)
+            .WithMaxValues(1);
+        var teams = season.Teams.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase).Take(25).ToList();
+        if (teams.Count == 0)
+        {
+            menu.AddOption("No teams registered", "none");
+            menu.WithDisabled(true);
+        }
+        else
+        {
+            foreach (var t in teams)
+            {
+                var label = t.Name.Length > 0 ? t.Name : "(unnamed)";
+                var driverCount = season.Drivers.Count(d => d.CurrentTeamId == t.Id);
+                menu.AddOption(label, Convert.ToHexString(t.Id.ToByteArray()), $"{driverCount} driver(s)", isDefault: t.Id == teamId);
+            }
+        }
+        return menu;
+    }
+
+    private static SelectMenuBuilder BuildTeam2Menu(string token, Season season, ByteString? team2Id)
+    {
+        var menu = new SelectMenuBuilder()
+            .WithCustomId($"analysis_team2:{token}")
+            .WithPlaceholder("Choose the second team")
+            .WithMinValues(1)
+            .WithMaxValues(1);
+        var teams = season.Teams.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase).Take(25).ToList();
+        if (teams.Count == 0)
+        {
+            menu.AddOption("No teams registered", "none");
+            menu.WithDisabled(true);
+        }
+        else
+        {
+            foreach (var t in teams)
+            {
+                var label = t.Name.Length > 0 ? t.Name : "(unnamed)";
+                var driverCount = season.Drivers.Count(d => d.CurrentTeamId == t.Id);
+                menu.AddOption(label, Convert.ToHexString(t.Id.ToByteArray()), $"{driverCount} driver(s)", isDefault: t.Id == team2Id);
+            }
+        }
+        return menu;
+    }
+
+    internal static SelectMenuBuilder BuildSeasonMenu(string customIdPrefix, string token, MainData mainData, Season season)
+    {
+        var menu = new SelectMenuBuilder()
+            .WithCustomId($"{customIdPrefix}:{token}")
+            .WithPlaceholder("Choose a season")
+            .WithMinValues(1)
+            .WithMaxValues(1);
+        foreach (var candidate in mainData.Seasons.OrderByDescending(x => x.Year).Take(25))
+        {
+            var label = string.IsNullOrWhiteSpace(candidate.Name) ? $"Season {candidate.Year}" : candidate.Name;
+            menu.AddOption(label, Convert.ToHexString(candidate.Id.ToByteArray()), candidate.Year.ToString(),
+                isDefault: candidate.Id == season.Id);
+        }
+        return menu;
+    }
+
+    internal static SelectMenuBuilder BuildLeagueMenu(string token, List<(League league, GameSeason gs)> leagueOptions, ByteString? leagueId)
     {
         var menu = new SelectMenuBuilder()
             .WithCustomId($"analysis_league:{token}")
@@ -527,7 +913,55 @@ public class AnalysisCommands : InteractionModuleBase<SocketInteractionContext>
         return menu;
     }
 
-    private SelectMenuBuilder BuildRaceMenu(string token, Season season, ByteString? raceId)
+    private static SelectMenuBuilder BuildDriver2Menu(string token, Season season, ByteString? driver2Id)
+    {
+        var menu = new SelectMenuBuilder()
+            .WithCustomId($"analysis_driver2:{token}")
+            .WithPlaceholder("Choose the second driver")
+            .WithMinValues(1)
+            .WithMaxValues(1);
+        var drivers = season.Drivers.OrderBy(d => d.Name, StringComparer.OrdinalIgnoreCase).Take(25).ToList();
+        if (drivers.Count == 0)
+        {
+            menu.AddOption("No drivers registered", "none");
+            menu.WithDisabled(true);
+        }
+        else
+        {
+            foreach (var d in drivers)
+            {
+                var team = season.Teams.FirstOrDefault(t => t.Id == d.CurrentTeamId);
+                var label = d.Name.Length > 0 ? d.Name : "(unnamed)";
+                var desc = team is not null ? $"#{d.Number} — {team.Name}" : $"#{d.Number}";
+                menu.AddOption(label, Convert.ToHexString(d.Id.ToByteArray()), desc, isDefault: d.Id == driver2Id);
+            }
+        }
+        return menu;
+    }
+
+    private static SelectMenuBuilder BuildPlayer2Menu(string token, GameSeason gs, string? player2Name)
+    {
+        var menu = new SelectMenuBuilder()
+            .WithCustomId($"analysis_player2:{token}")
+            .WithPlaceholder("Choose the second player")
+            .WithMinValues(1)
+            .WithMaxValues(1);
+        var players = gs.ParticipatingPlayers.OrderBy(p => p.PlayerName, StringComparer.OrdinalIgnoreCase).Take(25).ToList();
+        if (players.Count == 0)
+        {
+            menu.AddOption("No players registered", "none");
+            menu.WithDisabled(true);
+        }
+        else
+        {
+            foreach (var p in players)
+                menu.AddOption(p.PlayerName, Convert.ToHexString(Encoding.UTF8.GetBytes(p.PlayerName)),
+                    isDefault: string.Equals(p.PlayerName, player2Name, StringComparison.OrdinalIgnoreCase));
+        }
+        return menu;
+    }
+
+    internal static SelectMenuBuilder BuildRaceMenu(string token, Season season, ByteString? raceId, ByteString? latestRaceId = null)
     {
         var menu = new SelectMenuBuilder()
             .WithCustomId($"analysis_race:{token}")
@@ -535,7 +969,7 @@ public class AnalysisCommands : InteractionModuleBase<SocketInteractionContext>
             .WithMinValues(1)
             .WithMaxValues(1);
         var races = season.Races.OrderBy(r => r.Round).Take(25).ToList();
-        var defaultRaceId = raceId ?? _data.LatestRace(season)?.Id;
+        var defaultRaceId = raceId ?? latestRaceId;
         if (races.Count == 0)
         {
             menu.AddOption("No races configured", "none");

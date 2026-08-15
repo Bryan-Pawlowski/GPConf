@@ -286,6 +286,26 @@ public class PickCommands : InteractionModuleBase<SocketInteractionContext>
             return;
         }
 
+        // Post a public "picks locked in" announcement to the race-week channel, best-effort so a
+        // flaky channel resolve/send never blocks the pick submission already saved. Sent via REST —
+        // the bot runs with GatewayIntents.None, so socket guild channels are never cached (see the
+        // same approach in AnalysisCommands / BotMcpTools.SendAsync).
+        try
+        {
+            var mainData = _data.Load();
+            var season = _data.FindSeasonById(mainData, session.SeasonId);
+            var race = season is not null ? _data.FindRaceById(season, session.RaceId) : null;
+            var raceLabel = race?.Name ?? "this race";
+            var channelIdStr = Environment.GetEnvironmentVariable("CONF_DISCORD_CHANNEL_ID") ?? "1483173357393281157";
+            var restChannel = await Context.Client.Rest.GetChannelAsync(ulong.Parse(channelIdStr)) as IMessageChannel;
+            if (restChannel is not null)
+                await restChannel.SendMessageAsync($":white_check_mark: **{player.PlayerName}** locked in picks for {raceLabel}");
+        }
+        catch
+        {
+            // Best-effort announcement only — the pick is already saved.
+        }
+
         // Only a brand-new player waits on an LLM call, so only that path needs to defer first —
         // Discord's 3-second initial-ack window doesn't allow calling Ollama before acknowledging.
         // component.UpdateAsync() *is* the ack for the fast path; DeferAsync() is the ack for the

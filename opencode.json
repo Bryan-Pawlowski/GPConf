@@ -4,7 +4,8 @@
     "gpconf-bot": {
       "type": "remote",
       "url": "http://127.0.0.1:5177/",
-      "enabled": true
+      "enabled": true,
+      "timeout": 120000
     },
     "gpconf": {
       "type": "local",

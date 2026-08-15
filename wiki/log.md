@@ -5,6 +5,87 @@ ingest. Newest first. Format: `YYYY-MM-DD — <what> — <pages touched> — <co
 
 ---
 
+**2026-08-15** — Disambiguated the `gpconf-bot` MCP tool surface. Removed
+`post_standings`'s `confidenceCup: true` mode (which posted the plain
+confidence-cup scores embed) — it was redundant with the newer
+`post_leaderboard` tool (ranked player scores with momentum), and no skill
+called it. `post_standings` is now driver-championship only; its description
+points callers to `post_leaderboard` for confidence-cup standings. Pages
+touched: [pickem-bot-plan.md](pickem-bot-plan.md), [log.md](log.md). —
+uncommitted.
+
+**2026-08-15** — Converted the six DM-only read commands (`/standings`,
+`/results`, `/quali`, `/practice`, `/pick`, `/rules`) from typed-arg commands
+to parameterless ephemeral dropdown wizards, making the "any command needing
+structured input uses a wizard" convention in
+[llm-analysis-commands.md](llm-analysis-commands.md) universally true. The
+read wizard is a separate, simpler module in `ReadCommands.cs` (`read_*`
+component ids) that reuses `AnalysisSessionStore` (new `AnalysisKind` values
+`Standings`/`Results`/`Quali`/`Practice`/`Pick`/`Rules` + a `SessionNumber`
+field) and the shared dropdown builders from `AnalysisCommands` (widened to
+`internal static`); results render ephemeral in the DM, one-shot. Removed
+`/scores` + `BuildScoresEmbed` (superseded by `/leaderboard`) and the old
+`results_league` disambiguation picker (the wizard's auto-resolving league
+dropdown replaces it). `/pick`'s secrecy gate and `/results`' league
+attribution are preserved. Pages touched: [pickem-bot-plan.md](pickem-bot-plan.md),
+[llm-analysis-commands.md](llm-analysis-commands.md), [log.md](log.md). —
+uncommitted.
+
+**2026-08-15** — Added `GetPickEligibility` MCP tool to `GPConf.McpServer`
+(`QueryTools`). It returns the active league `PickRules` (incl.
+`PositionCutoff`, base scores, standings multipliers), the upcoming
+(undecided) race, the ineligible drivers (ranked `P1…PositionCutoff`), and
+the eligible pool with per-driver standings multipliers. This gives
+`race-weekend-prep`'s intro a single authoritative "who can be picked" source
+so its Confidence Cup Picks section never recommends an ineligible driver
+(fixed a real bug where it recommended Norris/Leclerc, both P1–P5 = cutoff,
+as strong picks). `race-weekend-prep` now calls `get_pick_eligibility`
+instead of deriving eligibility from raw standings. Pages touched:
+[mcp-server.md](mcp-server.md). — uncommitted.
+
+**2026-08-15** — `race-weekend-prep` intro now includes a confidence-cup
+picks analysis. Its research step pulls the weekend's practice/qualifying
+data and the previous race's results + championship standings from the
+`gpconf` MCP server, web-searches for similar tracks and driver pace at them,
+and weighs the confidence-cup scoring mechanics to flag strong/weak and value
+picks for the track. Surfaced as a dedicated `🎯 Confidence Cup Picks` section
+in the `generate_and_post` intro (sections now
+`Track & History, Storylines Since Last Race, Confidence Cup Picks, What To
+Watch`). Pages touched:
+[pickem-bot-plan.md](pickem-bot-plan.md). — uncommitted.
+
+**2026-08-15** — Enhanced `/compare` (driver comparison) with pace analysis.
+`BuildCompareFacts` now surfaces practice, qualifying, and race pace: average
+fastest-lap and race-time gaps (race pace), average practice fastest-lap gap
+(practice pace), and a quali head-to-head count alongside the existing grid
+positions. The AI analysis prompt now explicitly asks the model to discuss
+pace differences and how they factor into results. Pages touched:
+[llm-analysis-commands.md](llm-analysis-commands.md). — uncommitted.
+
+**2026-08-15** — Made the three comparison commands hybrid: they now post a
+prettier static stats embed **and** an Ollama-generated narrative analysis
+highlighting noteworthy differences and key performance indicators.
+`/team-analysis` became a two-team comparison (new `Team2Id` session field,
+`analysis_team2` handler, `BuildTeam2Menu`, `BuildTeamCompareFacts`).
+`/compare` and `/h2h` now also emit an AI analysis alongside their static
+embed. The comparison facts builders emit `**Header**` markdown sections that
+`ReadCommands.ParseFactsFields` splits into titled embed fields. Pages
+touched: [llm-analysis-commands.md](llm-analysis-commands.md). — uncommitted.
+
+**2026-08-15** — Converted the five deterministic stat commands
+(`/season-stats`, `/leaderboard`, `/compare`, `/h2h`, `/projected`) from
+typed slash-arg commands to the parameterless dropdown-wizard pattern, and
+added `/team-analysis` (Ollama-backed). Established the hard convention that
+**any bot command needing structured input (season/driver/player/team/race/
+league) must use a wizard, never slash args.** `AnalysisSessionStore` gained
+`Team`/`SeasonStats`/`Leaderboard`/`Compare`/`H2H`/`Projected` kinds and
+`Driver2Id`/`Player2Name` fields; `AnalysisCommands` gained the five wizard
+commands, `analysis_driver2`/`analysis_player2` handlers, and a deterministic
+generate path (embed built directly, no Ollama). The `Build*Embed` builders
+stayed in `ReadCommands.cs` (shared with `BotMcpTools`). Pages touched:
+[llm-analysis-commands.md](llm-analysis-commands.md), [index.md](index.md).
+— uncommitted.
+
 **2026-08-14** — Added the `pick-reminder` race-week skill: fires 15
 minutes before the pick deadline and posts an `@here` nudge listing any
 players who still haven't submitted picks (compares `get_player_picks`
