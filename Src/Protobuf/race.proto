@@ -63,4 +63,6 @@ message Race {
     repeated RaceResult race_results = 8;
     string date = 9;                        // ISO 8601: "YYYY-MM-DD"
     reserved 10;                            // was: is_sprint_weekend
+    int64 pick_deadline_epoch = 11;         // Unix epoch seconds when confidence-cup picks close (the earliest qualifying/sprint-qualifying start)
+    string announcement_message_id = 12;    // Discord message ID of this race's pick-announcement (button stripped at the deadline)
 }

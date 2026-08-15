@@ -5,6 +5,57 @@ ingest. Newest first. Format: `YYYY-MM-DD — <what> — <pages touched> — <co
 
 ---
 
+**2026-08-14** — Added the `pick-reminder` race-week skill: fires 15
+minutes before the pick deadline and posts an `@here` nudge listing any
+players who still haven't submitted picks (compares `get_player_picks`
+against the full roster from `get_player_scores`). New
+`.claude/skills/pick-reminder/SKILL.md` + `schedule-pick-reminder.ps1`
+(mirrors `schedule-pick-lockin.ps1`, fires at deadline − 15 min);
+`race-weekend-prep` now schedules it alongside `pick-lockin`. Because the
+bot stores players by Discord display name (not user ID) and runs with
+`GatewayIntents.None`, per-player @mentions aren't reliable, so the reminder
+uses an `@here` ping plus a named list. Pages touched:
+[pickem-bot-plan.md](pickem-bot-plan.md). — uncommitted.
+
+**2026-08-14** — Enforced the pick deadline as a hard cutoff. Added
+`Race.pick_deadline_epoch` + `Race.announcement_message_id` (race.proto
+fields 11/12). `post_pick_announcement` now takes a `deadlineEpoch` and
+records both on the race. `DataService.SubmitPicks` rejects late submissions
+(new `SubmitPicksResult.DeadlinePassed`), and the shared
+`RunPickerFlowAsync` guard (covers `/pick-submit`, the announce button, and
+resumed sessions) refuses to open a picker once the deadline has passed.
+Added a `close_pick_announcement` bot MCP tool that strips the announce
+button from the recorded message; `pick-lockin` now calls it before the
+reveal. Fixed `schedule-pick-lockin.ps1` (dropped `-DeleteExpiredTaskAfter`,
+which needs an `EndBoundary` PS 5.1 can't set — was failing 0x80041319).
+Pages touched: [data-model.md](data-model.md), [pickem-bot-plan.md](pickem-bot-plan.md).
+— uncommitted.
+
+**2026-08-14** — Generalized the analysis wizard to all four commands and
+made results persistent. `DriverAnalysisSessionStore` became
+`AnalysisSessionStore` with a `Kind` (`Driver`/`Player`/`Season`/`Recap`) and
+optional `PlayerName`/`RaceId`; `/player-analysis`, `/season-overview`, and
+`/race-recap` are now parameterless wizard commands (replacing their
+typed-param versions and the old `player_analysis_league`/`analysis_league`
+picker handlers). Generate now acks by disabling the button ("Generating…"),
+posts the analysis as a separate public persistent channel message, then
+re-enables the button and keeps the session for regeneration — `llm-analysis-commands.md` — uncommitted.
+
+**2026-08-14** — Switched the default `OLLAMA_MODEL` in `OllamaClient.cs`
+from `muse-glimmer:30b-mlx` to `qwen3.8:27b-mlx` — `llm-analysis-commands.md`
+— uncommitted.
+
+**2026-08-14** — Turned `/driver-analysis` from a typed-param command into a
+parameterless 3-select-menu-plus-button wizard (season -> driver -> league ->
+Generate), state-tracked by the new `DriverAnalysisSessionStore`
+(`GPConf.DiscordBot/Services/DriverAnalysisSessionStore.cs`, mirrors
+`PickSessionStore`). Added a "GPConf confidence-cup outlook" section to
+`AnalysisFacts.BuildDriverFacts` (new optional `league`/`gs` params): pick
+eligibility for the next race, standings multiplier if eligible, the
+league's position-cutoff rule, and a recent finishing-trend line — all
+computed via the same `CCUtils` entry points the real picker uses, never
+reimplemented — `llm-analysis-commands.md` — uncommitted.
+
 **2026-08-14** — Added `CCUtils.HasQualifiedAndStarted` and used it to filter
 `GetEligibleDriversWithPos`'s pick pool (from round 2 onward) so guest/junior
 drivers who only ran practice laps in a senior driver's car don't show up as

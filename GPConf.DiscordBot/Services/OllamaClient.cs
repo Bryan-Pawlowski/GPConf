@@ -23,7 +23,7 @@ public sealed class OllamaClient
             !host.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             host = "http://" + host;
         _baseUri = new Uri(host);
-        _model = Environment.GetEnvironmentVariable("OLLAMA_MODEL") ?? "muse-glimmer:30b-mlx";
+        _model = Environment.GetEnvironmentVariable("OLLAMA_MODEL") ?? "qwen3.8:27b-mlx";
 
         if (int.TryParse(Environment.GetEnvironmentVariable("OLLAMA_TIMEOUT_SECONDS"), out var timeoutSeconds))
             Http.Timeout = TimeSpan.FromSeconds(timeoutSeconds);

@@ -1,6 +1,7 @@
 # Data model
 
-> As of `4f40de8`. Source:
+> As of `4f40de8` (+ uncommitted: `Race.pick_deadline_epoch` /
+> `Race.announcement_message_id`, fields 11/12). Source:
 > `Src/Protobuf/*.proto`. **Never hand-edit the generated C# classes** — they
 > regenerate from these `.proto` files at build time into the `GPConf`
 > namespace (root `CLAUDE.md`).
@@ -39,7 +40,7 @@ the MCP server use the same helper (`CCUtils.CreateUniqueId()` in
 | `FinishStatus` (enum) | `UNSPECIFIED, FINISHED, DNF, DNS, DSQ` | |
 | `RaceDriverResult` | `driver_id`, `position`, `points`, `race_time`, `fastest_lap_seconds`, `laps_completed`, `status`, `team_id` | `team_id` is the team raced for *in this event* — may differ from `Driver.current_team_id` if the driver has since transferred; falls back to the driver's current team when empty (see `Migrate()` in [architecture.md](architecture.md)) |
 | `RaceResult` | `race_name`, `repeated RaceDriverResult results`, `PointRulesId` → `PointsScoringRules.Id`, **`is_complete`** (bool, field 4) | One `Race` can have multiple `RaceResult`s (e.g. sprint + main race), each with its own `race_name` and its own `PointRulesId`. Confidence-cup scoring only counts results where `is_complete == true` — see [confidence-cup-scoring.md](confidence-cup-scoring.md) |
-| `Race` | `id`, `name`, `circuit`, `round`, `practices`, `qualifying_sessions`, `race_results`, `date` (ISO 8601) | field 7 is `reserved`; **field 10 is now `reserved` too** — it used to be `bool is_sprint_weekend`, removed because sprint-ness is now inferred from having a second `RaceResult` (or its `race_name` containing "sprint"), not stored as a flag |
+| `Race` | `id`, `name`, `circuit`, `round`, `practices`, `qualifying_sessions`, `race_results`, `date` (ISO 8601), `pick_deadline_epoch` (field 11, `int64`), `announcement_message_id` (field 12, `string`) | field 7 is `reserved`; **field 10 is now `reserved` too** — it used to be `bool is_sprint_weekend`, removed because sprint-ness is now inferred from having a second `RaceResult` (or its `race_name` containing "sprint"), not stored as a flag. `pick_deadline_epoch` / `announcement_message_id` are written by `race-weekend-prep` via the bot's `post_pick_announcement` tool (see [mcp-server.md](mcp-server.md)) — they let the bot reject late picks and strip the announce button at the deadline |
 
 **Note:** `race.proto` currently has no trailing newline at EOF — cosmetic,
 not a bug, don't be surprised by it in a diff.

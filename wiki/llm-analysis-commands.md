@@ -1,6 +1,6 @@
 # LLM analysis commands (Ollama)
 
-> As of `b7ade99` + uncommitted (2026-08-13).
+> As of `56009f3` + uncommitted (2026-08-14).
 
 Four Discord slash commands in `GPConf.DiscordBot` generate narrative text
 via a locally-hosted Ollama server, layered on top of the same
@@ -32,37 +32,64 @@ field a model would misread into a false "retired after N laps" claim.
 
 | Command | Params | Facts builder |
 |---|---|---|
-| `/driver-analysis` | `season`, `driver` (exact name), `race` (optional, defaults to latest) | `AnalysisFacts.BuildDriverFacts` |
-| `/player-analysis` | `season`, `player` (optional, defaults to caller via Discord username), `league` (optional), `race` (optional) | `AnalysisFacts.BuildPlayerFacts` |
-| `/season-overview` | `season`, `league` (optional), `race` (optional, defaults to latest) | `AnalysisFacts.BuildSeasonFacts` |
-| `/race-recap` | `season`, `race` (required), `league` (optional) | `AnalysisFacts.BuildRaceRecapFacts` |
+| `/driver-analysis` | none — dropdown wizard | `AnalysisFacts.BuildDriverFacts` |
+| `/player-analysis` | none — dropdown wizard | `AnalysisFacts.BuildPlayerFacts` |
+| `/season-overview` | none — dropdown wizard | `AnalysisFacts.BuildSeasonFacts` |
+| `/race-recap` | none — dropdown wizard | `AnalysisFacts.BuildRaceRecapFacts` |
 
-All four: `DeferAsync()` → resolve season/race/driver/player via existing
-`DataService` lookups (graceful not-found `FollowupAsync`, never throws,
-**before** touching Ollama so a bad input never costs a slow model call) →
-build the facts block → `OllamaClient.GenerateAsync` → embed. Same house
-style as `ReadCommands.cs`.
+All four commands are parameterless and open an ephemeral dropdown wizard
+(see below). The generated analysis is posted as a **separate, public,
+persistent channel message** — only the wizard itself stays ephemeral, so
+the result survives bot restarts and isn't replaced by the widget.
 
-### League resolution
+### The dropdown wizard
 
-- `/season-overview` and `/race-recap` reuse the exact league-resolution
-  shape `ReadCommands.Results` established: silent if the season has ≤1
-  configured league, else try matching the caller's Discord
-  username/`GlobalName` against a `Player.PlayerName`, else a
-  `SelectMenuBuilder` picker (`analysis_league:{kind}:{seasonIdHex}:{raceIdHex}`,
-  `kind` ∈ `season`/`recap`, handled by `AnalysisLeagueSelected`). Unlike
-  `/results`, an unresolved league here isn't fatal — the command still runs,
-  just without the confidence-cup section.
-- `/player-analysis` needs a different resolver (`ResolvePlayerAsync`)
-  since the target is a *named player*, not necessarily the caller: explicit
-  `player` name is matched case-insensitively against every candidate
-  league's `ParticipatingPlayers`; if the name exists in more than one
-  league, a picker is shown (`player_analysis_league:{seasonIdHex}:{raceIdHex}`,
-  handled by `PlayerAnalysisLeagueSelected`). The player name travels in
-  each select option's `Value` (`{leagueIdHex}:{playerNameHexOrSELF}`), not
-  the shared `CustomId`, to stay under Discord's 100-char `CustomId` limit
-  regardless of name length. Omitting `player` falls back to the caller's
-  own Discord username/`GlobalName` match.
+Every command opens an ephemeral select-menu-plus-button widget, state-tracked
+by `AnalysisSessionStore` (`GPConf.DiscordBot/Services/DriverAnalysisSessionStore.cs`,
+mirrors `PickSessionStore`'s shape/TTL: an opaque 8-byte hex token embedded
+in every component's `CustomId`, since three raw GUIDs plus a command prefix
+would blow past Discord's 100-char `CustomId` limit). A session records its
+`Kind` (`Driver`/`Player`/`Season`/`Recap`) plus the optional `DriverId`,
+`LeagueId`, `PlayerName`, and `RaceId` selections, and `CallerId` binds it to
+whoever ran the command — every handler rejects interactions from any other
+user id.
+
+The dropdown sequence depends on the kind:
+
+- **Driver:** season → driver → league
+- **Player:** season → league → player → race (players are league-scoped,
+  from `GameSeason.ParticipatingPlayers`)
+- **Season:** season → league → race
+- **Recap:** season → race → league
+
+Flow:
+
+1. Command invocation defaults the season dropdown to the newest season
+   (`mainData.Seasons.OrderByDescending(s => s.Year).First()`) so the
+   subsequent dropdowns are populated immediately rather than starting empty.
+2. Changing the **season** dropdown (`analysis_season:{token}`) re-populates
+   the rest from that season's roster and resets any previously chosen
+   driver/league/player/race (a pick from a different season's data would be
+   meaningless).
+3. The **league** dropdown (`analysis_league:{token}`) only appears when the
+   season has more than one configured league — 0 or 1 leagues auto-resolve
+   silently, the same ≤1-league convention `ReadCommands.Results` uses.
+4. The **race** dropdown (`analysis_race:{token}`) defaults to the latest
+   race (`DataService.LatestRace`, falling back to round 1) but is
+   user-selectable.
+5. **Generate** (`analysis_generate:{token}`) validates the kind's required
+   selections, then `component.UpdateAsync` both acks the interaction AND
+   disables the Generate button (content set to "Generating…") so it can't be
+   re-clicked while the slow Ollama call is in flight. On success the embed
+   is sent to the channel via `Context.Channel.SendMessageAsync` (public,
+   persistent), then `ModifyOriginalResponseAsync` re-enables the button and
+   restores the prompt — the session is intentionally **kept** so the caller
+   can tweak the dropdowns and regenerate. On an Ollama error the button is
+   re-enabled and the error shown in the wizard.
+
+Every re-render (`BuildAnalysisComponents`) rebuilds the menus from the
+session's current state and marks the already-chosen option as `isDefault`
+on each, so switching one dropdown doesn't visually lose the others.
 
 ## `OllamaClient` (`GPConf.DiscordBot/Services/OllamaClient.cs`)
 
@@ -72,16 +99,13 @@ Singleton `HttpClient`, POSTs to Ollama's `/api/chat` (non-streaming,
 | Var | Default |
 |---|---|
 | `OLLAMA_HOST` | `scout:11434` (`http://` prepended if missing) |
-| `OLLAMA_MODEL` | `muse-glimmer:30b-mlx` |
+| `OLLAMA_MODEL` | `qwen3.8:27b-mlx` (was `muse-glimmer:30b-mlx` until 2026-08-14) |
 | `OLLAMA_TIMEOUT_SECONDS` | `180` |
 
-`muse-glimmer:30b-mlx` is a reasoning-capable model that produces lengthy
-chain-of-thought if left unconstrained (~30s and 663 eval tokens for a
-3-word test prompt with thinking on, ~17s with `think:false`) — real
-analysis prompts (facts block + 350-word output budget) should be expected
-to take well under the 180s timeout but noticeably longer than a trivial
-prompt; there is no caching/pre-generation, this is by design (the user
-explicitly accepted the on-demand wait over adding a cache layer).
+There is no caching/pre-generation — this is by design (the user explicitly
+accepted the on-demand wait over adding a cache layer). `"think": false` is
+sent regardless of model to suppress chain-of-thought output where the model
+supports it.
 
 All Ollama failure modes (connection refused, DNS failure, timeout,
 malformed JSON) normalize into one `OllamaException`, caught once per
@@ -95,8 +119,20 @@ what each builder includes:
 - **Driver** (`BuildDriverFacts`): identity (name, number, nationality,
   team), championship position/points/gaps at the cutoff race, a per-race
   table (qualifying grid position + stage reached, practice fastest laps,
-  race finish/status/points per session), and season aggregates (best/worst
-  finish, podiums, DNF/DNS/DSQ counts, average qualifying/race position).
+  race finish/status/points per session), season aggregates (best/worst
+  finish, podiums, DNF/DNS/DSQ counts, average qualifying/race position), a
+  recent finishing-trend line (last up-to-3 race finishes, improving/
+  declining/steady), and — when a league resolved (optional `league`/`gs`
+  params, `null` from the three typed-param commands' call sites but always
+  populated by the `/driver-analysis` wizard) — a "GPConf confidence-cup
+  outlook" block: pick eligibility for the next race
+  (`CCUtils.GetEligibleDriversWithPos`, using the race immediately before
+  `DataService.NextPickableRace` as `prevRace` — never `cutoff` itself, so
+  this never disagrees with what the real picker would offer), the driver's
+  standings multiplier if eligible (`CCUtils.GetStandingsMultiplier`), and
+  the league's position-cutoff rule. A driver who hasn't yet satisfied
+  `CCUtils.HasQualifiedAndStarted` (see [confidence-cup-scoring.md](confidence-cup-scoring.md))
+  gets an explicit note explaining why they're ineligible.
 - **Player** (`BuildPlayerFacts`): identity + league, cumulative score/rank
   at cutoff, per-race score history with running total (from the new
   `DataService.PlayerScoresPerRace`, which distinguishes "no picks

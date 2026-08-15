@@ -3,7 +3,7 @@
 > As of `b7ade99` + uncommitted changes (see [log.md](log.md)). DM-only read
 > commands, the pick-submission widget (`/pick-submit`, `/pick-announce`),
 > LLM analysis commands, and — as of this update — the full bot-as-MCP-server
-> foundation plus all six race-week automation skill files are built and
+> foundation plus all seven race-week automation skill files are built and
 > working. Discord permission gating, ephemeral-everything, and pick-secrecy
 > are all live. What's left is genuinely optional polish (see "Remaining
 > build order"), not core functionality.
@@ -79,7 +79,8 @@ below for what changed and why.
   reach an already-running bot, which is the whole point here — skills need
   to make the *live*, already-connected bot post. Tools: `post_message`,
   `post_pick_deadline_reminder`, `post_pick_announcement`, `post_pick_reveal`,
-  `post_race_results`, `post_standings`, `generate_and_post`. Every tool
+  `post_race_results`, `post_standings`, `generate_and_post`,
+  `close_pick_announcement`. Every tool
   reuses the exact embed-builder methods the slash commands use
   (`ReadCommands`/`PickCommands` expose them as `internal static` — see e.g.
   `BuildResultsEmbed`, `BuildPickEmbed`, `BuildPickAnnouncement`) — nothing is
@@ -202,7 +203,7 @@ time in; no per-viewer timezone handling needed.
 
 ## Race-week skill set (built)
 
-Six `SKILL.md` files under `.claude/skills/`, discoverable by both Claude
+Seven `SKILL.md` files under `.claude/skills/`, discoverable by both Claude
 Code and OpenCode (OpenCode reads `.claude/skills/*/SKILL.md` natively as a
 compatibility path — confirmed via its own docs, no duplication needed).
 Supersedes the original 7-step sketch below; kept for historical context on
@@ -222,11 +223,19 @@ what changed and why.
    history/recent news for an AI-written intro (one `generate_and_post`
    call, framed explicitly as speculation where it speculates), posts the
    deadline+scoring-rules reminder and the `@here` picks-open announcement,
-   then registers a one-shot Windows Task Scheduler job
-   (`pick-lockin/schedule-pick-lockin.ps1`) to fire `pick-lockin`
-   automatically at the deadline — neither Claude Code's nor OpenCode's
+   then registers one-shot Windows Task Scheduler jobs to fire
+   `pick-reminder` 15 minutes before the deadline and `pick-lockin` at the
+   deadline — neither Claude Code's nor OpenCode's
    skill system has any scheduling primitive of its own, confirmed via
    research, so this has to live outside both.
+2b. **`pick-reminder`** — fires 15 minutes before the deadline (scheduled
+   via `pick-reminder/schedule-pick-reminder.ps1`, or run manually). Compares
+   `get_player_picks` against the full participating roster to find who still
+   hasn't submitted, then posts an `@here` nudge listing those players by
+   name. A final call-to-action before `pick-lockin` closes picks — the bot
+   stores players by Discord display name (not user ID) and runs with
+   `GatewayIntents.None`, so per-player @mentions aren't reliable; the `@here`
+   ping plus a named list is the dependable approach.
 3. **`pick-lockin`** — fires at the deadline (scheduled, or run manually);
    posts the unconditional, ranked-by-potential-score picks reveal via
    `post_pick_reveal`. No call-to-action here — that already happened in
@@ -299,18 +308,21 @@ autostarted by either client.
    dropdowns + explicit "Lock In Picks" button), with
    `CCUtils.GetEligibleDriversWithPos` as the shared, never-duplicated
    eligibility source both the desktop app and bot call into.
-9. **Design changed, not "locked" the way originally planned**: there's no
-   explicit deadline-enforced lock state in the data model. The pick window
-   closes implicitly — `DataService.NextPickableRace` only ever targets the
-   earliest race with no recorded results, so picking after a race is
-   decided is structurally impossible. The *announced* deadline
-   (`race-weekend-prep`'s epoch) is a social/scheduling deadline enforced by
-   the `pick-lockin` skill firing the reveal, not a hard cutoff the bot
-   rejects late submissions against.
+9. **Deadline enforced as a hard cutoff, not just a social nudge**: the
+   pick window also closes implicitly — `DataService.NextPickableRace` only
+   ever targets the earliest race with no recorded results, so picking after
+   a race is decided is structurally impossible. The *announced* deadline
+   (`race-weekend-prep`'s epoch) is recorded on the `Race` via
+   `post_pick_announcement` and enforced as a **hard cutoff**: once it
+   passes, `DataService.SubmitPicks` rejects late submissions
+   (`DeadlinePassed`), the shared `RunPickerFlowAsync` guard refuses to open
+   a new picker (covering `/pick-submit`, the button, and resumed sessions),
+   and the `pick-lockin` skill strips the announce button via the bot's
+   `close_pick_announcement` tool.
 10. ~~Leaderboard/round-summary formatting~~ **done** — `/scores`, `/pick`,
     and the `post_pick_reveal`/`post_standings` MCP tools all render ranked
     tables.
-11. ~~The race-week orchestration skills~~ **done** — six skills under
+11. ~~The race-week orchestration skills~~ **done** — seven skills under
     `.claude/skills/`, see "Race-week skill set (built)" above. Superseded
     the original 7-step sketch (merged pre-race-analysis into `race-end`'s
     post-race analysis rather than a separate pre-race skill, and added a

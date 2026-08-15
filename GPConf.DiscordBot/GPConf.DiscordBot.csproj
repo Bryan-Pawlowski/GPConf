@@ -6,6 +6,11 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <UserSecretsId>gpc-dbot-secret</UserSecretsId>
+        <!-- deploy/restart-bot.ps1 publishes into publish/, inside the project root. Unlike
+             bin/obj, that folder isn't auto-excluded from the SDK's default item globs, so without
+             this exclusion each republish glob-includes the previous publish output as content and
+             copies it into itself — one nesting level (publish/publish/publish/...) deeper per run. -->
+        <DefaultItemExcludes>$(DefaultItemExcludes);publish\**</DefaultItemExcludes>
     </PropertyGroup>
 
     <ItemGroup>

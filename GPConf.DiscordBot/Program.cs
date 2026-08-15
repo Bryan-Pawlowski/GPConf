@@ -34,6 +34,7 @@ builder.Services
     .AddSingleton<DataService>()
     .AddSingleton<OllamaClient>()
     .AddSingleton<PickSessionStore>()
+    .AddSingleton<AnalysisSessionStore>()
     .AddSingleton(client)
     .AddSingleton(interactions);
 
@@ -59,7 +60,14 @@ client.Ready += async () =>
 client.InteractionCreated += async interaction =>
 {
     var ctx = new SocketInteractionContext(client, interaction);
-    await interactions.ExecuteCommandAsync(ctx, app.Services);
+    try
+    {
+        await interactions.ExecuteCommandAsync(ctx, app.Services);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[Interactions] ERROR handling {interaction.Type} in channel {interaction.ChannelId}: {ex}");
+    }
 };
 
 await client.LoginAsync(TokenType.Bot, token);

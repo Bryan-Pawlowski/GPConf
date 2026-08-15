@@ -161,6 +161,15 @@ public class PickCommands : InteractionModuleBase<SocketInteractionContext>
     // and the IUserMessage doc-comment on PickSession.DropdownMessage).
     private async Task RunPickerFlowAsync(Season s, Race target, League league, GameSeason gs)
     {
+        // Picks are only ever open until the deadline — the guard lives here (not just at the
+        // button) so /pick-submit, an already-open session being resumed, and a button click all
+        // hit the same check, even though the button itself is stripped at the deadline too.
+        if (_data.IsPicksClosed(target))
+        {
+            await FollowupAsync("⏰ The pick deadline has passed — picks are closed for this race.", ephemeral: true);
+            return;
+        }
+
         var outcome = StartSession(s, target, league, gs);
         if (!outcome.Ok) { await FollowupAsync(outcome.Message, ephemeral: true); return; }
         var dropdownMsg = await FollowupAsync(outcome.Message, embed: outcome.RulesEmbed, components: outcome.Components, ephemeral: true);
@@ -270,6 +279,7 @@ public class PickCommands : InteractionModuleBase<SocketInteractionContext>
             {
                 DataService.SubmitPicksResult.StaleData => "⚠️ The season data changed while you were picking — click the picks button again to retry.",
                 DataService.SubmitPicksResult.IneligibleDriver => "⚠️ One of your picks is no longer eligible — click the picks button again to retry.",
+                DataService.SubmitPicksResult.DeadlinePassed => "⏰ The pick deadline has passed — picks are closed for this race.",
                 _ => "⚠️ Couldn't save your picks — please try again.",
             };
             await component.UpdateAsync(m => { m.Content = msg; m.Embed = null; m.Components = new ComponentBuilder().Build(); });

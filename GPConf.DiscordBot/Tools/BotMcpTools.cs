@@ -36,11 +36,14 @@ public class BotMcpTools(DiscordSocketClient client, DataService data, OllamaCli
         "contradict them. Do not invent quotes from drivers or players. When asked to speculate, " +
         "frame it explicitly as speculation, not as stated fact.\n\n" +
         "Structure your response into the exact sections named in the request, each starting on " +
-        "its own line written exactly as '## <Section Name>'. Within a section, write 2-4 short " +
-        "sentences, or a handful of short bullet points starting with '- '. Use **bold** around " +
-        "driver/player names and key numbers to make them stand out. Do not use markdown tables, " +
-        "headers other than the '## ' section markers, or code fences. Favor short, scannable " +
-        "sections over walls of text.";
+        "its own line written exactly as '## <Section Name>'. Favor structured, scannable " +
+        "formatting over walls of text: mix short prose with lists and fact bullets. Within a " +
+        "section, prefer a handful of short bullet points starting with '- ' (each a single " +
+        "fact or observation), and use short prose only to tie them together or set up a point. " +
+        "Use **bold** around driver/player names and key numbers to make them stand out. Do not " +
+        "use markdown tables, headers other than the '## ' section markers, or code fences. " +
+        "Keep sections short and visually distinct — a reader should be able to scan the " +
+        "bullets and get the gist without reading every word.";
 
     [McpServerTool]
     [Description("Posts a plain Discord embed. Use this for content the caller has already composed itself — " +
@@ -106,6 +109,7 @@ public class BotMcpTools(DiscordSocketClient client, DataService data, OllamaCli
         [Description("Season name or year")] string season,
         [Description("League name (optional; if omitted, each clicker's league is auto-detected)")] string? league = null,
         [Description("If true, prefixes the message with an @here mention as a call-to-action.")] bool mentionHere = false,
+        [Description("Unix epoch seconds the picks deadline falls at. Recorded on the race so picks are rejected and the button is stripped at that time.")] long? deadlineEpoch = null,
         [Description("If true, DM dmUserId instead of posting to the channel.")] bool ephemeral = false,
         [Description("Discord user ID to DM when ephemeral is true")] string? dmUserId = null)
     {
@@ -124,7 +128,67 @@ public class BotMcpTools(DiscordSocketClient client, DataService data, OllamaCli
         }
 
         var (embed, button) = PickCommands.BuildPickAnnouncement(s, target, leagueId);
-        return await SendAsync(channelId, ephemeral, dmUserId, embed, button, mentionHere: mentionHere);
+        var sent = await SendAsyncCore(channelId, ephemeral, dmUserId, embed, button, mentionHere: mentionHere);
+        if (sent is null) return ephemeral
+            ? $"ephemeral is true but dmUserId is missing or not a valid Discord user ID."
+            : "Couldn't resolve the target channel.";
+
+        // Record the deadline and the announcement's message ID on the race so pick-lockin can
+        // strip the button at the deadline (and so a late pick/button-click is rejected).
+        if (deadlineEpoch is { } deadline)
+        {
+            data.RecordPickDeadlineAndAnnouncement(s.Id, target.Id, deadline, sent.Id.ToString());
+            return ephemeral ? $"DMed {dmUserId}." : $"Posted to channel {sent.Channel.Id} (deadline {deadlineEpoch} recorded).";
+        }
+
+        return ephemeral ? $"DMed {dmUserId}." : $"Posted to channel {sent.Channel.Id}.";
+    }
+
+    [McpServerTool]
+    [Description("Strips the 'Make Your Picks' button from a race's pick-announcement message (the one " +
+                 "post_pick_announcement recorded), replacing it with a 'picks closed' note. Meant to be called " +
+                 "by pick-lockin right after the deadline passes. Uses the announcement message ID stored on the race; " +
+                 "no-op if none is recorded or the message is already gone.")]
+    public async Task<string> ClosePickAnnouncement(
+        [Description("Discord channel ID the announcement was posted to. Falls back to CONF_DISCORD_CHANNEL_ID if omitted.")] string? channelId,
+        [Description("Season name or year")] string season,
+        [Description("Race name or round")] string race)
+    {
+        var mainData = data.Load();
+        var s = data.FindSeason(mainData, season);
+        if (s is null) return $"Season '{season}' not found.";
+        var r = data.FindRace(s, race);
+        if (r is null) return $"Race '{race}' not found in {s.Name}.";
+
+        var idStr = r.AnnouncementMessageId;
+        if (string.IsNullOrEmpty(idStr) || !ulong.TryParse(idStr, out var msgId))
+            return $"No pick-announcement message recorded for {r.Name} — nothing to close.";
+
+        // Resolve the channel (same fallback chain as SendAsyncCore).
+        var targetChannel = channelId ?? Environment.GetEnvironmentVariable("CONF_DISCORD_CHANNEL_ID") ?? DefaultChannelId;
+        if (!ulong.TryParse(targetChannel, out var channelUlong))
+            return $"'{targetChannel}' isn't a valid Discord channel ID.";
+        var channel = await client.Rest.GetChannelAsync(channelUlong) as IMessageChannel;
+        if (channel is null) return $"Couldn't resolve channel {channelUlong}.";
+
+        try
+        {
+            var msg = await channel.GetMessageAsync(msgId) as IUserMessage;
+            if (msg is null) return $"Couldn't resolve announcement message {msgId}.";
+            await msg.ModifyAsync(m => m.Components = new ComponentBuilder().Build());
+        }
+        catch (Discord.Net.HttpException)
+        {
+            return $"Couldn't edit announcement message {msgId} (already gone?).";
+        }
+        catch (Exception ex)
+        {
+            return $"Couldn't close announcement: {ex.Message}";
+        }
+
+        // Clear the stored message ID so a re-run of pick-lockin doesn't try to re-edit a stale one.
+        data.ClearAnnouncementMessageId(s.Id, r.Id);
+        return $"Closed pick-announcement for {r.Name} (button stripped from message {msgId}).";
     }
 
     [McpServerTool]
@@ -269,13 +333,23 @@ public class BotMcpTools(DiscordSocketClient client, DataService data, OllamaCli
     private async Task<string> SendAsync(string? channelId, bool ephemeral, string? dmUserId, Embed embed,
         MessageComponent? components = null, bool mentionHere = false)
     {
+        var sent = await SendAsyncCore(channelId, ephemeral, dmUserId, embed, components, mentionHere);
+        if (sent is null) return $"Couldn't resolve the target channel/user for {channelId ?? dmUserId}.";
+        return ephemeral ? $"DMed {dmUserId}." : $"Posted to channel {sent.Channel.Id}.";
+    }
+
+    // Like SendAsync but returns the sent message (null on resolution failure) so callers that
+    // need to later edit/delete it can capture its ID.
+    private async Task<IUserMessage?> SendAsyncCore(string? channelId, bool ephemeral, string? dmUserId, Embed embed,
+        MessageComponent? components = null, bool mentionHere = false)
+    {
         IMessageChannel? channel;
         if (ephemeral)
         {
             if (dmUserId is null || !ulong.TryParse(dmUserId, out var uid))
-                return "ephemeral is true but dmUserId is missing or not a valid Discord user ID.";
+                return null;
             var user = await client.Rest.GetUserAsync(uid);
-            if (user is null) return $"Couldn't resolve Discord user {dmUserId}.";
+            if (user is null) return null;
             channel = await user.CreateDMChannelAsync();
         }
         else
@@ -284,14 +358,13 @@ public class BotMcpTools(DiscordSocketClient client, DataService data, OllamaCli
             // CONF_DISCORD_CHANNEL_ID overrides this; an explicit channelId argument overrides both.
             var idStr = channelId ?? Environment.GetEnvironmentVariable("CONF_DISCORD_CHANNEL_ID") ?? DefaultChannelId;
             if (!ulong.TryParse(idStr, out var id))
-                return $"'{idStr}' isn't a valid Discord channel ID.";
+                return null;
             channel = await client.Rest.GetChannelAsync(id) as IMessageChannel;
-            if (channel is null) return $"Couldn't resolve channel {id} (not found, or not a message channel).";
+            if (channel is null) return null;
         }
 
         var allowedMentions = mentionHere ? new AllowedMentions(AllowedMentionTypes.Everyone) : null;
-        await channel.SendMessageAsync(mentionHere ? "@here" : null, embed: embed, components: components, allowedMentions: allowedMentions);
-        return ephemeral ? $"DMed {dmUserId}." : $"Posted to channel {channel.Id}.";
+        return await channel.SendMessageAsync(mentionHere ? "@here" : null, embed: embed, components: components, allowedMentions: allowedMentions);
     }
 
     private static Color ParseColor(string? hex)

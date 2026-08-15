@@ -1,6 +1,6 @@
 # GPConf wiki
 
-> As of `4f40de8` (2026-08-13).
+> As of `4f40de8` (2026-08-13) + uncommitted changes (see [log.md](log.md)).
 
 GPConf is a Windows desktop app (ImGui + OpenGL 3.3 + SDL3, .NET) for building
 and running Formula 1 "confidence cup" fantasy seasons: season/driver/team
@@ -27,8 +27,9 @@ scraped race results.
   (currently manual) gap between "CSV on disk" and "data in `gpconf.data`".
 - **[pickem-bot-plan.md](pickem-bot-plan.md)** — design & tech plan for a
   Discord pick'em bot extending the confidence-cup model. The `GPConf.DiscordBot/`
-  scaffold (DM-only read commands) is in the working tree; the race-week
-  orchestration skills and pick-submission flow are still design-only.
+  scaffold, DM-only read commands, the pick-submission flow (`/pick-submit`,
+  `/pick-announce`), LLM analysis commands, the bot-as-MCP-server surface, and
+  the seven race-week orchestration skills are all built.
 - **[llm-analysis-commands.md](llm-analysis-commands.md)** — four Discord
   slash commands (`/driver-analysis`, `/player-analysis`, `/season-overview`,
   `/race-recap`) that generate narrative text via a local Ollama server,
@@ -50,9 +51,9 @@ scraped race results.
    [race-data-pipeline.md](race-data-pipeline.md) — there's a known manual
    step in that pipeline.
 5. If the task involves the Discord bot, read
-   [pickem-bot-plan.md](pickem-bot-plan.md) first — it's design-only today,
-   and records decisions (architecture, eligibility semantics, a blocking
-   bug) that would otherwise get re-derived from scratch.
+   [pickem-bot-plan.md](pickem-bot-plan.md) first — it records decisions
+   (architecture, eligibility semantics, a blocking bug, the deadline/lock
+   design) that would otherwise get re-derived from scratch.
 
 See [wiki/CLAUDE.md](CLAUDE.md) for how this wiki is maintained (ingest /
 query / lint) and root [CLAUDE.md](../CLAUDE.md) for build/run commands and

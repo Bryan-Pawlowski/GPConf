@@ -92,6 +92,16 @@ public sealed class DataService
     public Season? FindSeasonById(MainData data, ByteString id) =>
         data.Seasons.FirstOrDefault(s => s.Id == id);
 
+    /// <summary>Unix epoch seconds when confidence-cup picks close for a race, or null if no
+    /// deadline has been recorded for it yet (no announcement has been posted).</summary>
+    public long? PickDeadline(Race race) =>
+        race.PickDeadlineEpoch > 0 ? race.PickDeadlineEpoch : null;
+
+    /// <summary>True once the pick deadline for this race has passed (or no deadline is recorded,
+    /// i.e. the weekend was never announced and picking shouldn't be offered at all).</summary>
+    public bool IsPicksClosed(Race race) =>
+        PickDeadline(race) is { } deadline && DateTimeOffset.FromUnixTimeSeconds(deadline).UtcDateTime < DateTime.UtcNow;
+
     public Race? FindRaceById(Season season, ByteString id) =>
         season.Races.FirstOrDefault(r => r.Id == id);
 
@@ -175,7 +185,40 @@ public sealed class DataService
         return result;
     }
 
-    public enum SubmitPicksResult { Ok, NotFound, IneligibleDriver, StaleData }
+    public enum SubmitPicksResult { Ok, NotFound, IneligibleDriver, StaleData, DeadlinePassed }
+
+    /// <summary>Records the confidence-cup pick deadline for a race and the Discord message ID of
+    /// its pick-announcement post (so pick-lockin can strip the button at the deadline). Writes
+    /// atomically with a fresh reload. No-op if the race isn't found.</summary>
+    public void RecordPickDeadlineAndAnnouncement(ByteString seasonId, ByteString raceId, long deadlineEpoch, string announcementMessageId)
+    {
+        var (mainData, version) = _data.LoadWithVersion();
+        var season = mainData.Seasons.FirstOrDefault(s => s.Id == seasonId);
+        var race = season?.Races.FirstOrDefault(r => r.Id == raceId);
+        if (race is null) return;
+
+        race.PickDeadlineEpoch = deadlineEpoch;
+        if (!string.IsNullOrEmpty(announcementMessageId))
+            race.AnnouncementMessageId = announcementMessageId;
+
+        try { _data.Save(mainData, version); }
+        catch (ConcurrentSaveException) { /* best-effort — caller can retry */ }
+    }
+
+    /// <summary>Clears the stored announcement message ID for a race (used after the button has
+    /// been stripped, so a re-run of pick-lockin doesn't try to re-edit a stale ID). No-op if the
+    /// race isn't found.</summary>
+    public void ClearAnnouncementMessageId(ByteString seasonId, ByteString raceId)
+    {
+        var (mainData, version) = _data.LoadWithVersion();
+        var season = mainData.Seasons.FirstOrDefault(s => s.Id == seasonId);
+        var race = season?.Races.FirstOrDefault(r => r.Id == raceId);
+        if (race is null) return;
+
+        race.AnnouncementMessageId = string.Empty;
+        try { _data.Save(mainData, version); }
+        catch (ConcurrentSaveException) { /* best-effort */ }
+    }
 
     /// <summary>Resolves the calling player (auto-registering a brand-new one if needed) and
     /// writes their picks for the given race, atomically with a fresh reload of gpconf.data.
@@ -193,6 +236,11 @@ public sealed class DataService
         var gs = league?.Seasons.FirstOrDefault(x => x.SeasonId == seasonId);
         if (season is null || race is null || league is null || gs is null)
             return (SubmitPicksResult.NotFound, null, false);
+
+        // Picks close at the deadline; reject a late submission regardless of entry point, so an
+        // already-open pick session can't be locked in after the deadline either.
+        if (IsPicksClosed(race))
+            return (SubmitPicksResult.DeadlinePassed, null, false);
 
         // Resolve the calling player, auto-registering if this is their first time:
         // 1) already participating this season -> use them.

@@ -1,5 +1,6 @@
 using System.Text;
 using Google.Protobuf;
+using GPConf.Utilities;
 
 namespace GPConf.DiscordBot.Services;
 
@@ -12,7 +13,8 @@ namespace GPConf.DiscordBot.Services;
 /// </summary>
 public static class AnalysisFacts
 {
-    public static string BuildDriverFacts(DataService data, Season season, Driver driver, Race cutoff)
+    public static string BuildDriverFacts(
+        DataService data, Season season, Driver driver, Race cutoff, League? league = null, GameSeason? gs = null)
     {
         var team = season.Teams.FirstOrDefault(t => t.Id == driver.CurrentTeamId);
         var points = data.ChampionshipPoints(season, cutoff);
@@ -103,6 +105,49 @@ public static class AnalysisFacts
         sb.AppendLine(qualiPositions.Count > 0
             ? $"- Average qualifying position: P{qualiPositions.Average():F1}"
             : "- No qualifying data recorded");
+
+        if (finishPositions.Count >= 2)
+        {
+            var recent = finishPositions.TakeLast(Math.Min(3, finishPositions.Count)).ToList();
+            var trend = recent[^1] < recent[0] ? "improving" : recent[^1] > recent[0] ? "declining" : "steady";
+            sb.AppendLine($"- Recent finishing trend (last {recent.Count} races, oldest to newest): " +
+                $"{string.Join(", ", recent.Select(p => $"P{p}"))} ({trend})");
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("GPConf confidence-cup outlook:");
+        if (gs is not null && league is not null)
+        {
+            var rules = gs.PickRules ?? new PickRules();
+            // Eligibility for the *next* pickable race, not for `cutoff` itself — mirrors exactly
+            // how PickCommands.StartSession derives prevRace (the race immediately before the one
+            // being picked for), so this never disagrees with what the picker would actually offer.
+            var nextRace = data.NextPickableRace(season);
+            var prevRaceForEligibility = nextRace is not null
+                ? season.Races.OrderBy(r => r.Round).LastOrDefault(r => r.Round < nextRace.Round)
+                : cutoff;
+            var eligiblePairs = CCUtils.GetEligibleDriversWithPos(season, prevRaceForEligibility, rules.PositionCutoff);
+            var eligibleEntry = eligiblePairs.FirstOrDefault(x => x.driver.Id == driver.Id);
+            bool isEligible = eligibleEntry.driver is not null;
+            bool qualifiedAndStarted = CCUtils.HasQualifiedAndStarted(season, driver);
+
+            sb.AppendLine($"- League: {league.LeagueName}");
+            sb.AppendLine($"- Pick eligibility for {nextRace?.Name ?? "the next race"}: {(isEligible ? "eligible" : "not eligible")}" +
+                (!isEligible && !qualifiedAndStarted
+                    ? " (has not yet qualified and started a race this season, so is not a confidence-cup pick option)"
+                    : ""));
+            if (isEligible && eligibleEntry.champPos > 0)
+            {
+                var mult = CCUtils.GetStandingsMultiplier(rules, eligibleEntry.champPos);
+                sb.AppendLine($"- Standings multiplier if picked: x{mult:G} (entering at championship P{eligibleEntry.champPos})");
+            }
+            if (rules.PositionCutoff > 0)
+                sb.AppendLine($"- League rule: drivers ranked P{rules.PositionCutoff} or better in the championship are not pick-eligible.");
+        }
+        else
+        {
+            sb.AppendLine("- No league resolved for this request — omit any pick-eligibility commentary.");
+        }
 
         return sb.ToString();
     }
