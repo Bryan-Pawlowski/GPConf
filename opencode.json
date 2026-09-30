@@ -7,10 +7,11 @@
       "enabled": true,
       "timeout": 120000
     },
-    "gpconf": {
-      "type": "local",
-      "command": ["C:\\Program Files (x86)\\GPConf\\mcp\\GPConf.McpServer.exe"],
-      "enabled": true
-    }
+      "gpconf": {
+        "type": "local",
+        "command": ["C:\\Program Files (x86)\\GPConf\\mcp\\GPConf.McpServer.exe"],
+        "enabled": true,
+        "timeout": 120000
+      }
   }
 }
