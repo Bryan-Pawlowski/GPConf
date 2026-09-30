@@ -207,18 +207,21 @@ public class GpConfApp
         if (_bOpenSeasonUpdater) { SeasonUpdater.Draw(this); }
         if (_bOpenLeagueEditor)  { LeagueEditor.Draw(this); }
         if (_bOpenLeagueUpdater) { LeagueUpdater.Draw(this); }
+        if (_bOpenRaceWeekendDashboard) { RaceWeekendDashboard.Draw(this); }
     }
 
     bool _bOpenSeasonEditor  = false;
     bool _bOpenSeasonUpdater = false;
     bool _bOpenLeagueEditor  = false;
     bool _bOpenLeagueUpdater = false;
+    bool _bOpenRaceWeekendDashboard = false;
     private void SeasonMenu()
     {
         if (ImGui.BeginMenu("Seasons"))
         {
             if (ImGui.MenuItem("Season Editor"))  { _bOpenSeasonEditor  = !_bOpenSeasonEditor; }
             if (ImGui.MenuItem("Season Updater")) { _bOpenSeasonUpdater = !_bOpenSeasonUpdater; }
+            if (ImGui.MenuItem("Race Weekend Dashboard")) { _bOpenRaceWeekendDashboard = !_bOpenRaceWeekendDashboard; }
             ImGui.EndMenu();
         }
     }
