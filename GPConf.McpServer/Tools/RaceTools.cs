@@ -174,6 +174,7 @@ public class RaceTools(GpConfDataAccess data)
                     DriverId                  = driver?.Id ?? Google.Protobuf.ByteString.Empty,
                     FastestLapSeconds         = inp.Q3Time > 0 ? inp.Q3Time : inp.Q2Time > 0 ? inp.Q2Time : inp.Q1Time,
                     QualiSessionEliminated    = inp.QualifyingStage,
+                    TeamId                    = driver?.CurrentTeamId ?? Google.Protobuf.ByteString.Empty,
                 });
             }
 
@@ -217,6 +218,7 @@ public class RaceTools(GpConfDataAccess data)
                 DriverId          = driver?.Id ?? Google.Protobuf.ByteString.Empty,
                 FastestLapSeconds = inp.FastestLap,
                 AverageLapSeconds = inp.AverageLap,
+                TeamId            = driver?.CurrentTeamId ?? Google.Protobuf.ByteString.Empty,
             });
         }
         r.Practices.Add(session);

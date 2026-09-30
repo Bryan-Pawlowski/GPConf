@@ -9,6 +9,7 @@ message LapData {
     float fastest_lap_seconds = 2;
     float average_lap_seconds = 3;
     int32 quali_session_eliminated = 4; // Qualifying only: 1-based session number eliminated in; 0 = not eliminated
+    bytes team_id = 5;                  // Team the driver drove for in this session, pinned at ingestion time
 }
 
 // A free practice session (FP1, FP2, FP3, etc.).

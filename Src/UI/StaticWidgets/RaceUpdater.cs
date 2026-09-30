@@ -66,7 +66,7 @@ public class RaceUpdater
             int next = race.Practices.Count == 0 ? 1 : race.Practices.Max(p => p.SessionNumber) + 1;
             var session = new PracticeSession { SessionNumber = next };
             foreach (Driver d in season.Drivers.Where(d => !d.CurrentTeamId.IsEmpty))
-                session.LapData.Add(new LapData { DriverId = d.Id });
+                session.LapData.Add(new LapData { DriverId = d.Id, TeamId = d.CurrentTeamId });
             race.Practices.Add(session);
         }
     }
@@ -125,7 +125,7 @@ public class RaceUpdater
                 : race.QualifyingSessions.Max(q => q.Stage) + 1;
             var session = new QualifyingSession { Stage = stage, SessionName = $"Q{stage}" };
             foreach (Driver d in season.Drivers.Where(d => !d.CurrentTeamId.IsEmpty))
-                session.LapData.Add(new LapData { DriverId = d.Id });
+                session.LapData.Add(new LapData { DriverId = d.Id, TeamId = d.CurrentTeamId });
             race.QualifyingSessions.Add(session);
         }
     }
@@ -158,7 +158,9 @@ public class RaceUpdater
             {
                 LapData ld  = grid[p];
                 Driver? drv = season.Drivers.FirstOrDefault(d => d.Id == ld.DriverId);
-                Team? team  = drv != null ? season.Teams.FirstOrDefault(t => t.Id == drv.CurrentTeamId) : null;
+                Team? team  = season.Teams.FirstOrDefault(t => t.Id == ld.TeamId);
+                if (team == null && drv != null)
+                    team = season.Teams.FirstOrDefault(t => t.Id == drv.CurrentTeamId);
 
                 ImGui.TableNextRow();
 
@@ -303,7 +305,9 @@ public class RaceUpdater
                 ImGui.TableNextRow();
 
                 Driver? drv  = season.Drivers.FirstOrDefault(d => d.Id == ld.DriverId);
-                Team?   team = drv != null ? season.Teams.FirstOrDefault(t => t.Id == drv.CurrentTeamId) : null;
+                Team?   team = season.Teams.FirstOrDefault(t => t.Id == ld.TeamId);
+                if (team == null && drv != null)
+                    team = season.Teams.FirstOrDefault(t => t.Id == drv.CurrentTeamId);
 
                 ImGui.TableSetColumnIndex(0);
                 int drvPush0 = SetDriverCellBg(team);
@@ -345,7 +349,7 @@ public class RaceUpdater
             lapData.Remove(toRemove);
 
         DrawAddDriverCombo(season, lapData.Select(ld => ld.DriverId),
-            d => lapData.Add(new LapData { DriverId = d.Id }));
+            d => lapData.Add(new LapData { DriverId = d.Id, TeamId = d.CurrentTeamId }));
     }
 
     // ── Race results table ────────────────────────────────────────────────────

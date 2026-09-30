@@ -69,6 +69,7 @@ public class QueryTools(GpConfDataAccess data)
         if (session is null) return $"No FP{sessionNumber} data stored for '{r.Name}'.";
 
         var driverMap = s.Drivers.ToDictionary(d => d.Id, d => d.Name);
+        var teamMap   = s.Teams.ToDictionary(t => t.Id, t => t.Name);
 
         var results = session.LapData
             .Where(ld => ld.FastestLapSeconds > 0)
@@ -77,6 +78,7 @@ public class QueryTools(GpConfDataAccess data)
             {
                 position   = idx + 1,
                 driver     = driverMap.GetValueOrDefault(ld.DriverId, "(unknown)"),
+                team       = teamMap.GetValueOrDefault(ld.TeamId, "(unknown)"),
                 fastestLap = ld.FastestLapSeconds,
                 averageLap = ld.AverageLapSeconds > 0 ? (float?)ld.AverageLapSeconds : null,
             })
@@ -101,6 +103,7 @@ public class QueryTools(GpConfDataAccess data)
         if (r.QualifyingSessions.Count == 0) return $"No qualifying data stored for '{r.Name}'.";
 
         var driverMap = s.Drivers.ToDictionary(d => d.Id, d => d.Name);
+        var teamMap   = s.Teams.ToDictionary(t => t.Id, t => t.Name);
 
         // Collect all driver entries; for drivers that appear in multiple sessions, keep the one
         // from the latest (highest) stage as it represents their best qualifying attempt.
@@ -119,6 +122,7 @@ public class QueryTools(GpConfDataAccess data)
             {
                 gridPosition    = idx + 1,
                 driver          = driverMap.GetValueOrDefault(x.ld.DriverId, "(unknown)"),
+                team            = teamMap.GetValueOrDefault(x.ld.TeamId, "(unknown)"),
                 fastestLap      = x.ld.FastestLapSeconds > 0 ? (float?)x.ld.FastestLapSeconds : null,
                 qualifyingStage = x.stage, // 0 = Q3 finisher, 1 = Q1 out, 2 = Q2 out
             })

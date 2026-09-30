@@ -514,7 +514,7 @@ public class LeagueUpdater
             return;
         }
 
-        var bestLaps = new Dictionary<ByteString, (float time, int session)>();
+        var bestLaps = new Dictionary<ByteString, (float time, int session, ByteString teamId)>();
         foreach (PracticeSession ps in selectedRace.Practices)
         {
             foreach (LapData ld in ps.LapData)
@@ -522,7 +522,7 @@ public class LeagueUpdater
                 if (ld.FastestLapSeconds <= 0) continue;
                 if (!bestLaps.TryGetValue(ld.DriverId, out var existing) ||
                     ld.FastestLapSeconds < existing.time)
-                    bestLaps[ld.DriverId] = (ld.FastestLapSeconds, ps.SessionNumber);
+                    bestLaps[ld.DriverId] = (ld.FastestLapSeconds, ps.SessionNumber, ld.TeamId);
             }
         }
 
@@ -530,7 +530,8 @@ public class LeagueUpdater
             .Select(kv => (
                 driver:  season.Drivers.FirstOrDefault(d => d.Id == kv.Key),
                 time:    kv.Value.time,
-                session: kv.Value.session))
+                session: kv.Value.session,
+                teamId:  kv.Value.teamId))
             .Where(x => x.driver != null)
             .OrderBy(x => x.time)
             .ToList();
@@ -555,12 +556,14 @@ public class LeagueUpdater
             ImGui.TableSetupColumn("Session",  ImGuiTableColumnFlags.WidthFixed, 50);
             ImGui.TableHeadersRow();
 
-            foreach (var (driver, time, session) in sorted)
+            foreach (var (driver, time, session, teamId) in sorted)
             {
                 ImGui.TableNextRow();
 
                 ImGui.TableSetColumnIndex(0);
-                Team? team = season.Teams.FirstOrDefault(t => t.Id == driver!.CurrentTeamId);
+                Team? team = season.Teams.FirstOrDefault(t => t.Id == teamId);
+                if (team == null && driver != null)
+                    team = season.Teams.FirstOrDefault(t => t.Id == driver!.CurrentTeamId);
                 if (team != null && team.Color != 0)
                 {
                     ImGui.TableSetBgColor(ImGuiTableBgTarget.CellBg,
@@ -713,7 +716,7 @@ public class LeagueUpdater
         }
 
         // Per-driver accumulated grid results across past races.
-        var driverData = new Dictionary<ByteString, List<(int pos, string raceName, int? elimSession)>>();
+        var driverData = new Dictionary<ByteString, List<(int pos, string raceName, int? elimSession, ByteString teamId)>>();
         // Per-driver per-session poles: (raceName, sessionName).
         var driverPoles = new Dictionary<ByteString, List<(string raceName, string sessionName)>>();
 
@@ -805,10 +808,17 @@ public class LeagueUpdater
             {
                 if (!driverData.TryGetValue(id, out var list))
                 {
-                    list = new List<(int, string, int?)>();
+                    list = new List<(int, string, int?, ByteString)>();
                     driverData[id] = list;
                 }
-                list.Add((pos, rn, elimSess));
+                // Resolve the team from this race's qualifying LapData (pinned team_id).
+                ByteString raceTeamId = ByteString.Empty;
+                foreach (QualifyingSession qs in race.QualifyingSessions)
+                {
+                    var ld = qs.LapData.FirstOrDefault(l => l.DriverId == id);
+                    if (ld is not null && !ld.TeamId.IsEmpty) { raceTeamId = ld.TeamId; break; }
+                }
+                list.Add((pos, rn, elimSess, raceTeamId));
             }
         }
 
@@ -824,7 +834,11 @@ public class LeagueUpdater
             .Select(kv =>
             {
                 Driver? d         = season.Drivers.FirstOrDefault(dr => dr.Id == kv.Key);
-                Team?   team      = d != null ? season.Teams.FirstOrDefault(t => t.Id == d.CurrentTeamId) : null;
+                // Use the team from the most recent qualifying entry (last in the list).
+                var latestTeamId  = kv.Value.LastOrDefault().teamId ?? ByteString.Empty;
+                Team?   team      = !latestTeamId.IsEmpty
+                    ? season.Teams.FirstOrDefault(t => t.Id == latestTeamId)
+                    : (d != null ? season.Teams.FirstOrDefault(t => t.Id == d.CurrentTeamId) : null);
                 var     poleList  = driverPoles.TryGetValue(kv.Key, out var pl) ? pl : new();
                 int     poles     = poleList.Count;
                 string  poleTip   = string.Join("\n", poleList.Select(p => $"{p.raceName} ({p.sessionName})"));

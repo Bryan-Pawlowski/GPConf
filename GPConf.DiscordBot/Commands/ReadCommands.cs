@@ -208,8 +208,10 @@ public class ReadCommands : InteractionModuleBase<SocketInteractionContext>
             .ThenBy(x => x.ld.FastestLapSeconds > 0 ? x.ld.FastestLapSeconds : float.MaxValue)
             .Select(x =>
             {
-                var driver = driverMap.GetValueOrDefault(x.ld.DriverId);
-                return driver is not null ? teamMap.GetValueOrDefault(driver.CurrentTeamId)?.Color ?? 0 : 0;
+                var team = teamMap.GetValueOrDefault(x.ld.TeamId);
+                if (team is null && driverMap.GetValueOrDefault(x.ld.DriverId) is { } driver)
+                    team = teamMap.GetValueOrDefault(driver.CurrentTeamId);
+                return team?.Color ?? 0;
             })
             .FirstOrDefault();
 
@@ -219,7 +221,9 @@ public class ReadCommands : InteractionModuleBase<SocketInteractionContext>
             .Select((x, i) =>
             {
                 var driver = driverMap.GetValueOrDefault(x.ld.DriverId);
-                var team = driver is not null ? teamMap.GetValueOrDefault(driver.CurrentTeamId) : null;
+                var team = teamMap.GetValueOrDefault(x.ld.TeamId);
+                if (team is null && driver is not null)
+                    team = teamMap.GetValueOrDefault(driver.CurrentTeamId);
                 return FormatRow(i + 1, DriverLabel(driver), TeamLabel(team), FormatLap(x.ld.FastestLapSeconds).PadLeft(9));
             })
             .ToList();
@@ -261,14 +265,21 @@ public class ReadCommands : InteractionModuleBase<SocketInteractionContext>
             .Select((ld, i) =>
             {
                 var driver = driverMap.GetValueOrDefault(ld.DriverId);
-                var team = driver is not null ? teamMap.GetValueOrDefault(driver.CurrentTeamId) : null;
+                var team = teamMap.GetValueOrDefault(ld.TeamId);
+                if (team is null && driver is not null)
+                    team = teamMap.GetValueOrDefault(driver.CurrentTeamId);
                 return FormatRow(i + 1, DriverLabel(driver), TeamLabel(team), FormatLap(ld.FastestLapSeconds).PadLeft(9));
             })
             .ToList();
 
         var fastestColor = fastestEntries.Count > 0
-            ? (driverMap.GetValueOrDefault(fastestEntries[0].DriverId) is { } fd ? teamMap.GetValueOrDefault(fd.CurrentTeamId)?.Color ?? 0 : 0)
+            ? (teamMap.GetValueOrDefault(fastestEntries[0].TeamId)?.Color ?? 0)
             : 0;
+        if (fastestColor == 0 && fastestEntries.Count > 0)
+        {
+            var fd = driverMap.GetValueOrDefault(fastestEntries[0].DriverId);
+            fastestColor = fd is not null ? teamMap.GetValueOrDefault(fd.CurrentTeamId)?.Color ?? 0 : 0;
+        }
 
         return new EmbedBuilder()
             .WithTitle($"FP{session} — {r.Name}")

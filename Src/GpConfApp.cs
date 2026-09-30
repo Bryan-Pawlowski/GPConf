@@ -96,12 +96,30 @@ public class GpConfApp
         {
             var driverTeam = s.Drivers.ToDictionary(d => d.Id, d => d.CurrentTeamId);
             foreach (Race race in s.Races)
+            {
                 foreach (RaceResult rr in race.RaceResults)
                     foreach (RaceDriverResult res in rr.Results)
                         if (res.TeamId.IsEmpty
                             && driverTeam.TryGetValue(res.DriverId, out var tid)
                             && !tid.IsEmpty)
                             res.TeamId = tid;
+
+                // Same backfill for practice/qualifying LapData — pins team_id so the
+                // driver's historical sessions keep showing the team they drove for.
+                foreach (PracticeSession ps in race.Practices)
+                    foreach (LapData ld in ps.LapData)
+                        if (ld.TeamId.IsEmpty
+                            && driverTeam.TryGetValue(ld.DriverId, out var ptid)
+                            && !ptid.IsEmpty)
+                            ld.TeamId = ptid;
+
+                foreach (QualifyingSession qs in race.QualifyingSessions)
+                    foreach (LapData ld in qs.LapData)
+                        if (ld.TeamId.IsEmpty
+                            && driverTeam.TryGetValue(ld.DriverId, out var qtid)
+                            && !qtid.IsEmpty)
+                            ld.TeamId = qtid;
+            }
         }
     }
 
