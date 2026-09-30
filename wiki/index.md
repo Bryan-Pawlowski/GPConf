@@ -1,6 +1,6 @@
 # GPConf wiki
 
-> As of `2bfdba6` + uncommitted changes (see [log.md](log.md)).
+> As of `1f3cf1b` (see [log.md](log.md)).
 
 GPConf is a Windows desktop app (ImGui + OpenGL 3.3 + SDL3, .NET) for building
 and running Formula 1 "confidence cup" fantasy seasons: season/driver/team
@@ -17,11 +17,12 @@ scraped race results.
   `race`, `season`, `confidence_game`), what references what, ID conventions.
 - **[mcp-server.md](mcp-server.md)** — every MCP tool, what it does, the
   data-access layer, concurrency caveats, how it's packaged/installed.
-- **[ui-layer.md](ui-layer.md)** — map of the ImGui widgets, which windows
+- **[ui-layer.md](ui-layer.md)** — map of the ImGui widgets (incl. the race-weekend dashboard), which windows
   exist, what's a stub.
 - **[confidence-cup-scoring.md](confidence-cup-scoring.md)** — how
   championship points and pick-scoring are computed (`CCUtils`), including the
-  in-flight "result completeness" + per-ruleset multiplier rework.
+  the "result completeness" + per-ruleset multiplier rework, the
+  DNF-into-a-points-slot fix, and the pick-eligibility semantics.
 - **[race-data-pipeline.md](race-data-pipeline.md)** — the standalone
   motorsport.com scraper and the `RaceData/` CSV dumps it produces, and the
   (currently manual) gap between "CSV on disk" and "data in `gpconf.data`".

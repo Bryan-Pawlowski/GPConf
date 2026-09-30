@@ -1,6 +1,6 @@
 # Race data pipeline: scraper → CSV → (manual) → `gpconf.data`
 
-> As of `4f40de8`. Scraper source: `Python/f1_results_to_csv.py` (introduced
+> As of `1f3cf1b`. Scraper source: `Python/f1_results_to_csv.py` (introduced
 > in commit `3a01b82`). Data: `RaceData/` — committed to git as of `4f40de8`.
 
 ## The scraper — `Python/f1_results_to_csv.py`
@@ -73,7 +73,8 @@ RaceData/{Series}{Year}/{RaceLocation}/{year}_{race_slug}_{session}.csv
 `RaceTools.SetRaceResults` / `SetQualifyingResults` / `SetPracticeResults`
 (see [mcp-server.md](mcp-server.md)) take a **JSON array**, not a CSV, and
 use different field names than the scraper's CSV headers. There is no
-CSV→JSON adapter script in the repo. The apparent intended workflow is:
+CSV→JSON adapter script *in git* (a working-tree `RaceData/csv_to_mcp.py`
+demonstrates the manual conversion but is not committed). The apparent intended workflow is:
 
 1. Run the scraper to produce CSVs under `RaceData/`.
 2. An agent (or a human) reads a CSV and constructs the JSON payload the

@@ -5,6 +5,55 @@ ingest. Newest first. Format: `YYYY-MM-DD — <what> — <pages touched> — <co
 
 ---
 
+**2026-09-29** — Committed the Round-14 confidence-cup fix plus a batch of
+working-tree changes as seven tightly-scoped commits:
+`14336bc` pins `LapData.team_id` at ingestion (practice/qualifying laps
+resolve to the team driven *that session*; `Migrate()` backfills old data;
+MCP query tools, Discord FP/quali embeds, and the desktop tables now
+fallback to the driver's current team, so a transferred driver's history
+keeps the original team color instead of zeroing);
+`4b26bbb` adds the `SetRaceComplete` MCP tool (flips
+`RaceResult.IsComplete` on stored results without re-passing them —
+the retroactive fix path used for the Round-14 incident);
+`2fb5f93` hardens `GenerateRaceOrder` against the Round-14 failure mode
+(duplicate/unset `Position` can no longer promote a DNF into a points
+slot) and adds `IsSeasonEntrant` so a genuine mid-season debut is pickable
+on its first race; `c8f6196` null-guards combo labels (TeamEditor,
+DriverEditor, RaceUpdater), fixes the `RaceConfig` drag-downward off-by-one,
+resolves `SeasonUpdater`'s `currentSeason` from the canonical `Seasons`
+list, and makes `Clear()` also wipe `Leagues` with a real `CurrentSeason.Id`;
+`3658dc7` adds points-scoring presets (F1 2025 GP/Sprint + three historical
+grids) with a Load Preset combo in `PointsScoringEditor`; `5459ff0` adds the
+`RaceWeekendDashboard` window (per-race data-entry status, Seasons menu);
+`1f3cf1b` raises the gpconf MCP timeout in `opencode.json`. Pages touched:
+[data-model.md](data-model.md), [mcp-server.md](mcp-server.md),
+[architecture.md](architecture.md), [ui-layer.md](ui-layer.md),
+[confidence-cup-scoring.md](confidence-cup-scoring.md),
+[race-data-pipeline.md](race-data-pipeline.md),
+[pickem-bot-plan.md](pickem-bot-plan.md),
+[llm-analysis-commands.md](llm-analysis-commands.md),
+[index.md](index.md), [log.md](log.md). — `1f3cf1b`.
+
+**2026-09-15** — Fixed Round 14 ("Tag Heuer Gran Premio De Espana", 2026)
+confidence-cup scoring corruption. The result set had been ingested with four
+DNFs (Sainz, Perez, Stroll, Hamilton) all stored at `Position = 1` alongside
+the winner; `GenerateRaceOrder`'s plain `OrderBy(Position)` then promoted those
+DNFs into P2–P5 and pushed the real P7–P10 points finishers (Colapinto,
+Piastri, Lindblad, Hulkenberg) out of the scoring positions, zeroing valid
+picks. Corrected the stored classification (DNFs reclassified 19–22 by laps
+completed) and hardened `GenerateRaceOrder` (`Src/Utilities/ConfCupUtils.cs`)
+to force non-finishers/unset positions behind classified finishers regardless
+of stored `Position` — a no-op for every clean round, but no future duplicate
+or missing position can promote a DNF into the points again. Also set the
+race's `circuit` to `MADRING` (was `"???"`). Corrected R14 pick scores:
+AWK0TAC0 23 (+21), Sp00nAhh 15.5, Sceve 12.5, WildGingerBear 13, chopper34 9,
+Skweepz 7.5; through R14 AWK0TAC0 moves to P1 (178.75) ahead of chopper34
+(170.5). Pages touched: [confidence-cup-scoring.md](confidence-cup-scoring.md),
+[log.md](log.md), [mcp-server.md](mcp-server.md), [data-model.md](data-model.md),
+[architecture.md](architecture.md), [ui-layer.md](ui-layer.md), [pickem-bot-plan.md](pickem-bot-plan.md),
+[index.md](index.md). — `2fb5f93` (plus the team_id, `SetRaceComplete`, UI, and
+opencode commits of 2026-09-29).
+
 **2026-08-15** — Disambiguated the `gpconf-bot` MCP tool surface. Removed
 `post_standings`'s `confidenceCup: true` mode (which posted the plain
 confidence-cup scores embed) — it was redundant with the newer
@@ -29,7 +78,7 @@ field) and the shared dropdown builders from `AnalysisCommands` (widened to
 dropdown replaces it). `/pick`'s secrecy gate and `/results`' league
 attribution are preserved. Pages touched: [pickem-bot-plan.md](pickem-bot-plan.md),
 [llm-analysis-commands.md](llm-analysis-commands.md), [log.md](log.md). —
-uncommitted.
+`3d9462c`.
 
 **2026-08-15** — Added `GetPickEligibility` MCP tool to `GPConf.McpServer`
 (`QueryTools`). It returns the active league `PickRules` (incl.

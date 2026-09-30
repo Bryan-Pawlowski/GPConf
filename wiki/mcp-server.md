@@ -1,6 +1,6 @@
 # MCP server
 
-> As of `4f40de8`. Source: `GPConf.McpServer/`.
+> As of `1f3cf1b`. Source: `GPConf.McpServer/`.
 
 `GPConf.McpServer` is a separate .NET process (`Program.cs`, a minimal
 generic host) that exposes `gpconf.data` to AI agents over stdio
@@ -65,6 +65,12 @@ than auto-creating it.
 | `SetRaceResults` | `season, race, resultsJson, sessionName?, isComplete=false, pointsRulesName?` | Deserializes a JSON array (`DriverName, TeamName, Position, Points, Status, RaceTime, FastestLap, LapsCompleted`), resolves names → IDs, replaces the `RaceResult` keyed by `sessionName` (defaults to the race name; use a distinct name for a sprint result stored alongside the main race). **New:** `isComplete` sets `RaceResult.IsComplete`; `pointsRulesName` resolves a `PointsScoringRules.Name` match and sets `PointRulesId` |
 | `SetQualifyingResults` | `season, race, resultsJson` | Deserializes (`DriverName, Q1Time, Q2Time, Q3Time, GridPosition, QualifyingStage, SessionName`), groups by stage into `QualifyingSession`s, sets `FastestLapSeconds` from the latest stage reached |
 | `SetPracticeResults` | `season, race, sessionNumber, resultsJson` | Deserializes (`DriverName, FastestLap, AverageLap`), replaces the `PracticeSession` for that number |
+| `SetRaceComplete` | `season, race, isComplete=true, sessionName?` | Flips `RaceResult.IsComplete` on stored results without re-passing them — the retroactive way to (de)activate confidence-cup scoring on already-ingested results. Omit `sessionName` to flip every `RaceResult` on the race; otherwise only the matching session |
+
+`SetPracticeResults`/`SetQualifyingResults` also pin `LapData.team_id` from
+the resolved driver's current team, so a driver's historical practice/qualifying
+sessions keep showing the team they drove for even after a transfer (see
+[data-model.md](data-model.md)).
 
 `ParseStatus` maps `"DNF"/"DNS"/"DSQ"` (case-insensitive) → `FinishStatus`,
 defaulting to `Finished`.
@@ -76,15 +82,15 @@ if a `DriverName`/`TeamName` doesn't match an existing entity exactly
 empty ID silently. Create/verify drivers and teams via `EntityTools` first,
 using names that exactly match what you're about to feed to `RaceTools`.
 
-### `Tools/QueryTools.cs` (**modified in working tree** — refactored)
+### `Tools/QueryTools.cs` (refactored to shared `CCUtils`)
 
 Read-only, all return JSON:
 
 | Tool | Does |
 |---|---|
 | `GetRaceResults` | Per-session results (handles sprint), resolved to names, ordered by position |
-| `GetPracticeResults` | FP results sorted by fastest lap |
-| `GetQualifyingResults` | Grid order: Q3 finishers first, then Q2 eliminees, then Q1 eliminees |
+| `GetPracticeResults` | FP results sorted by fastest lap, with the pinned team name per lap |
+| `GetQualifyingResults` | Grid order: Q3 finishers first, then Q2 eliminees, then Q1 eliminees, with the pinned team name per lap |
 | `GetChampionshipStandings` | Cumulative driver points through the given race (inclusive) |
 | `GetPlayerPicks` | Each player's picks + computed confidence-cup score for a race; "preview" (pre-race) scoring if the race has no complete result yet, real scoring once it does |
 | `GetPlayerScores` | Cumulative player confidence-cup scores, round 1 → given race |
@@ -98,7 +104,7 @@ heuristic). That copy was deleted; `QueryTools` now calls the shared
 [confidence-cup-scoring.md](confidence-cup-scoring.md) for why and what
 changed.
 
-## Packaging (**modified in working tree**, `GPConf.McpServer.csproj`)
+## Packaging (`GPConf.McpServer.csproj`)
 
 - `<RuntimeIdentifier>win-x64</RuntimeIdentifier>` +
   `<SelfContained>true</SelfContained>` — publishes as a self-contained win-x64

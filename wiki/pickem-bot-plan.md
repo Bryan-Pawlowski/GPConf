@@ -1,6 +1,6 @@
 # Discord pick'em bot — design & tech plan
 
-> As of `2bfdba6` + uncommitted changes (see [log.md](log.md)). DM-only read
+> As of `1f3cf1b`. DM-only read
 > commands, the pick-submission widget (`/pick-submit`, `/pick-announce`),
 > LLM analysis commands, and — as of this update — the full bot-as-MCP-server
 > foundation plus all seven race-week automation skill files are built and
@@ -164,7 +164,7 @@ plain text. It is not a chat bot. Each command returns a formatted embed.
 | `/standings` | Championship points table (driver, team, nationality, points) |
 | `/results` | Race results table for the given race |
 | `/quali` | Qualifying grid results |
-| `/practice` | Practice session results |
+| `/practice` | Practice session results (fastest-lap rows colored with the lap's pinned team color) |
 | `/pick` | A player's picks + computed scores per race |
 | `/rules` | Current season's points rules and confidence-cup multiplier table |
 

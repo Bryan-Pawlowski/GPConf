@@ -1,6 +1,6 @@
 # Data model
 
-> As of `2bfdba6`. Source:
+> As of `1f3cf1b`. Source:
 > `Src/Protobuf/*.proto`. **Never hand-edit the generated C# classes** — they
 > regenerate from these `.proto` files at build time into the `GPConf`
 > namespace (root `CLAUDE.md`).
@@ -33,7 +33,7 @@ the MCP server use the same helper (`CCUtils.CreateUniqueId()` in
 
 | Message | Fields | Notes |
 |---|---|---|
-| `LapData` | `driver_id`, `fastest_lap_seconds`, `average_lap_seconds`, `quali_session_eliminated` | 1-based stage eliminated in; `0` = not eliminated |
+| `LapData` | `driver_id`, `fastest_lap_seconds`, `average_lap_seconds`, `quali_session_eliminated`, `team_id` (field 5) | `quali_session_eliminated`: 1-based stage eliminated in; `0` = not eliminated. `team_id` is the team the driver drove for *in this session*, pinned at ingestion (`SetPracticeResults`/`SetQualifyingResults` and the desktop `RaceUpdater` set it from the driver's current team); backfilled on load by `Migrate()` for old data (see [architecture.md](architecture.md)). Consumers fall back to `Driver.current_team_id` when it's empty |
 | `PracticeSession` | `session_number` (1=FP1…), `repeated LapData` | |
 | `QualifyingSession` | `stage` (1=Q1,2=Q2,3=Q3), `repeated LapData`, `session_name` | |
 | `FinishStatus` (enum) | `UNSPECIFIED, FINISHED, DNF, DNS, DSQ` | |
@@ -73,6 +73,7 @@ Driver.current_team_id      → Team.id
 Team.manufacturer_id        → Manufacturer.id
 RaceDriverResult.driver_id  → Driver.id
 RaceDriverResult.team_id    → Team.id            (per-race override; empty → Driver.current_team_id)
+LapData.team_id             → Team.id            (per-session override for practice/qualifying; empty → Driver.current_team_id)
 RaceResult.PointRulesId     → PointsScoringRules.Id
 GameSeason.SeasonId         → Season.id
 GameRace.RaceId             → Race.id

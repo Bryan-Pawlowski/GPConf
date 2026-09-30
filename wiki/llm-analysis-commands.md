@@ -1,6 +1,6 @@
 # LLM analysis commands (Ollama)
 
-> As of `56009f3` + uncommitted (2026-08-14).
+> As of `1f3cf1b`.
 
 The Discord slash commands in `GPConf.DiscordBot` that take structured input
 (season/driver/player/team/race/league) generate narrative text via a

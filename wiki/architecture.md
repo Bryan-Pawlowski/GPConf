@@ -1,6 +1,6 @@
 # Architecture
 
-> As of `4f40de8`.
+> As of `1f3cf1b`.
 
 ## Two processes, one data file
 
@@ -59,17 +59,24 @@ clobber MCP-side edits to `seasons[i]` on the app's next load. **If you touch
 season-shaped data anywhere, check whether this dance still applies** — it's
 the kind of thing that's easy to silently break.
 
-`Migrate()` also does two other one-time cleanups on every load: backfills
-missing `Season.Id` on old data, and defaults any `RaceDriverResult` with no
-pinned `TeamId` to the driver's *current* registered team (so historic
-results don't retroactively show a driver's later team once results carry an
-explicit per-result `team_id` — see [data-model.md](data-model.md)).
+`Migrate()` also does a few one-time backfills on every load: missing
+`Season.Id` on old data; any `RaceDriverResult` with no pinned `TeamId`
+defaults to the driver's *current* registered team (so historic results don't
+retroactively show a driver's later team once results carry an explicit
+per-result `team_id`); and the same backfill for practice/qualifying
+`LapData.team_id` — so a driver's historical sessions keep showing the team
+they drove for (see [data-model.md](data-model.md)).
 
 ## Save path (desktop app)
 
 `GpConfApp.Save()` disables the watcher's `EnableRaisingEvents` before
 writing (so its own write doesn't trigger a self-reload loop), truncates via
 `File.Create`, writes, then re-enables the watcher.
+
+`GpConfApp.Clear()` wipes `Seasons` **and `Leagues`** (so no dangling
+`GameSeason.SeasonId` refs survive) and gives the fresh `CurrentSeason` a real
+`Id` (the empty-ByteString default would break the ID match in `Migrate()` on
+the next load).
 
 ## See also
 

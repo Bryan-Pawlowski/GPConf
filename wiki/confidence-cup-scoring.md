@@ -1,6 +1,6 @@
 # Confidence cup scoring (`CCUtils`)
 
-> As of `4f40de8`. Source: `Src/Utilities/ConfCupUtils.cs`, class `CCUtils`.
+> As of `1f3cf1b`. Source: `Src/Utilities/ConfCupUtils.cs`, class `CCUtils`.
 > Source-linked (not project-referenced) into `GPConf.McpServer` — see
 > [mcp-server.md](mcp-server.md) — so this is genuinely one implementation
 > shared by the desktop app and the MCP server, not two implementations kept
@@ -28,10 +28,14 @@ everywhere (see [data-model.md](data-model.md)).
 - `GetPointsForPosition(rules, position)` — 1-based `position` →
   `rules.Score[position-1]`, `0` if out of range (i.e. finishing outside the
   scoring positions).
-- `GenerateRaceOrder(raceResult)` — sorts finishers by laps-completed then
-  race-time, then appends non-finishers similarly sorted — i.e. DNFs sink
-  below all finishers regardless of laps completed. Drives the
-  `DrawResultsTable` ordering in [ui-layer.md](ui-layer.md).
+- `GenerateRaceOrder(raceResult)` — orders by `Position` (the authoritative
+  classification written at ingestion), but forces non-finishers
+  (`Status != Finished`) and rows with no valid `Position` to the tail
+  regardless of their stored position. This guarantees a DNF/DNS can never
+  land in a points slot even if ingestion writes it a duplicate or unset
+  `Position` (see the Round-14 incident in [log.md](log.md)). Drives the
+  `DrawResultsTable` ordering in [ui-layer.md](ui-layer.md) and the
+  championship-point snapshot (and therefore pick eligibility/multipliers).
 - `GetDriverChampionshipPointSnapshotForRace(season, race, driver)` —
   cumulative points for a driver through a given race (inclusive), iterating
   `season.Races` in list order and stopping once the target race is reached.
@@ -84,9 +88,12 @@ session or race result) are excluded from this pool via `CCUtils.HasQualifiedAnd
 driver)` — true only if the driver has a qualifying-session `LapData` entry *and* a `RaceDriverResult`
 with `status != DNS` somewhere in the season. This filter only applies from round 2 onward
 (`prevRace != null`); round 1 stays unfiltered because at season start no driver has any participation
-history yet, so gating there would empty the whole pick pool instead of just excluding guests. One
-side effect: a legitimate mid-season driver debut is also excluded from eligibility until their first
-qualifying + race-start is recorded, same as a guest would be.
+history yet, so gating there would empty the whole pick pool instead of just excluding guests. From
+round 2 on, though, the filter is `HasQualifiedAndStarted(season, driver) || IsSeasonEntrant(season,
+driver)`: `IsSeasonEntrant` is true when the driver is registered to one of the season's teams
+(`Driver.current_team_id` matches a `season.Teams` id), so a legitimate mid-season debut (a genuine
+entrant with no qualifying/start record yet) stays pickable on their first race of the year, while a
+practice-only guest who carries no team still drops out once the round-2 filter kicks in.
 
 Championship standings themselves never needed this treatment — they're built from
 `RaceDriverResult.Points` directly (`QueryTools.GetChampionshipStandings`,
