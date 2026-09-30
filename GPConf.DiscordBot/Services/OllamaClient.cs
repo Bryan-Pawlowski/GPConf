@@ -1,10 +1,14 @@
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace GPConf.DiscordBot.Services;
 
 /// <summary>
-/// Thin wrapper around a locally-hosted Ollama server's /api/chat endpoint.
+/// Thin wrapper around a local LLM's OpenAI-compatible /v1/chat/completions endpoint.
+/// (Originally an Ollama /api/chat wrapper; switched to the OpenAI API because the
+/// in-use "splash" endpoint is OpenAI-only — /api/chat returns 404 — and the same
+/// request/response shape works against an Ollama server that proxies /v1.)
 /// Config is read once from environment variables (same pattern as CONF_BOT_TOKEN in Program.cs).
 /// </summary>
 public sealed class OllamaClient
@@ -18,12 +22,12 @@ public sealed class OllamaClient
 
     public OllamaClient()
     {
-        var host = Environment.GetEnvironmentVariable("OLLAMA_HOST") ?? "scout:11434";
+        var host = Environment.GetEnvironmentVariable("OLLAMA_HOST") ?? "http://100.123.43.8:11436";
         if (!host.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
             !host.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             host = "http://" + host;
         _baseUri = new Uri(host);
-        _model = Environment.GetEnvironmentVariable("OLLAMA_MODEL") ?? "qwen3.8:27b-mlx";
+        _model = Environment.GetEnvironmentVariable("OLLAMA_MODEL") ?? "incoai/Qwen3.8-27B-Splash";
 
         if (int.TryParse(Environment.GetEnvironmentVariable("OLLAMA_TIMEOUT_SECONDS"), out var timeoutSeconds))
             Http.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
@@ -33,19 +37,18 @@ public sealed class OllamaClient
     public async Task<string> GenerateAsync(string systemPrompt, string userPrompt, CancellationToken ct = default)
     {
         var request = new ChatRequest(
-            _model,
-            [new ChatMessage("system", systemPrompt), new ChatMessage("user", userPrompt)],
+            Model: _model,
+            Messages: [new ChatMessage("system", systemPrompt), new ChatMessage("user", userPrompt)],
             Stream: false,
-            Think: false); // this model has "thinking" capability and rambles at length if left on
+            MaxTokens: 16384,
+            Temperature: 0.7,
+            TopP: 1.0);
 
         try
         {
-            var response = await Http.PostAsJsonAsync(new Uri(_baseUri, "/api/chat"), request, ct);
-            response.EnsureSuccessStatusCode();
-            var parsed = await response.Content.ReadFromJsonAsync<ChatResponse>(cancellationToken: ct);
-            var content = parsed?.Message?.Content;
+            var content = await PostChatAsync(request, ct);
             if (string.IsNullOrWhiteSpace(content))
-                throw new OllamaException("Ollama returned an empty response.");
+                throw new OllamaException("The model returned an empty response.");
             return content;
         }
         catch (OllamaException)
@@ -54,30 +57,65 @@ public sealed class OllamaClient
         }
         catch (HttpRequestException ex)
         {
-            throw new OllamaException($"Couldn't reach Ollama at {_baseUri} ({ex.Message}).", ex);
+            throw new OllamaException($"Couldn't reach the LLM endpoint at {_baseUri} ({ex.Message}).", ex);
         }
         catch (TaskCanceledException ex)
         {
-            throw new OllamaException($"Ollama at {_baseUri} timed out after {Http.Timeout.TotalSeconds:F0}s.", ex);
+            throw new OllamaException($"The LLM endpoint at {_baseUri} timed out after {Http.Timeout.TotalSeconds:F0}s.", ex);
         }
         catch (Exception ex) when (ex is System.Text.Json.JsonException or NotSupportedException)
         {
-            throw new OllamaException($"Ollama at {_baseUri} returned an unparseable response.", ex);
+            throw new OllamaException($"The LLM endpoint at {_baseUri} returned an unparseable response.", ex);
         }
+    }
+
+    // Posts the request to the OpenAI-compatible /v1/chat/completions endpoint and returns
+    // the first choice's message content. An empty content field on a truncated/empty reply
+    // surfaces as a null, which the caller reports as an empty response.
+    private async Task<string?> PostChatAsync(ChatRequest request, CancellationToken ct)
+    {
+        // Serialize the request the same way PostAsJsonAsync would (default camelCase
+        // JsonOptions) and log the EXACT bytes we send — needed to diff against the
+        // working Python probe when vLLM rejects the request.
+        var json = JsonSerializer.Serialize(request);
+        Console.WriteLine($"[OllamaClient] -> POST {_baseUri}/v1/chat/completions  body({json.Length}ch): {json}");
+        var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+        var response = await Http.PostAsync(new Uri(_baseUri, "/v1/chat/completions"), content, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            // Surface the server's error body (vLLM returns JSON like {"error":{"message":...}});
+            // EnsureSuccessStatusCode alone swallowed it and left every 4xx opaque.
+            var err = await response.Content.ReadAsStringAsync(ct);
+            if (err.Length > 1024) err = err[..1024];
+            Console.WriteLine($"[OllamaClient] <- {response.StatusCode} {response.ReasonPhrase}  error: {err}");
+            throw new HttpRequestException(
+                $"{(int)response.StatusCode} {response.ReasonPhrase}: {err}");
+        }
+        var parsed = await response.Content.ReadFromJsonAsync<ChatResponse>(cancellationToken: ct);
+        return parsed?.Choices?[^1]?.Message?.Content;
     }
 
     private sealed record ChatRequest(
         [property: JsonPropertyName("model")] string Model,
         [property: JsonPropertyName("messages")] ChatMessage[] Messages,
         [property: JsonPropertyName("stream")] bool Stream,
-        [property: JsonPropertyName("think")] bool Think);
+        // Generous so the model can spend its reasoning tokens first and still have budget
+        // left for the actual reply (Qwen3.8 burns several thousand tokens thinking before
+        // it emits a single content token; a tight cap truncated every reply to empty).
+        [property: JsonPropertyName("max_tokens")] int MaxTokens,
+        [property: JsonPropertyName("temperature")] double Temperature,
+        [property: JsonPropertyName("top_p")] double TopP);
 
     private sealed record ChatMessage(
         [property: JsonPropertyName("role")] string Role,
         [property: JsonPropertyName("content")] string Content);
 
     private sealed record ChatResponse(
-        [property: JsonPropertyName("message")] ChatMessage? Message);
+        [property: JsonPropertyName("choices")] ChatChoice[]? Choices);
+
+    private sealed record ChatChoice(
+        [property: JsonPropertyName("message")] ChatMessage? Message,
+        [property: JsonPropertyName("finish_reason")] string? FinishReason);
 }
 
 public sealed class OllamaException(string message, Exception? inner = null) : Exception(message, inner);
