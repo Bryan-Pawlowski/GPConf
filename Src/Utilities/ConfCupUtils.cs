@@ -57,7 +57,14 @@ public class CCUtils
         // result). LapsCompleted/RaceTime aren't reliably populated — most classified finishers
         // share LapsCompleted == 0 ("laps behind the leader") by convention, which left this with
         // no real tiebreaker and silently fell back to raw storage order.
-        return result.Results.OrderBy(r => r.Position).ToList();
+        //
+        // Non-finishers (and any row with no valid position) are forced behind classified
+        // finishers regardless of their stored Position, so a duplicate or unset position
+        // can never promote a DNF into the points.
+        return result.Results
+            .OrderBy(r => r.Status == FinishStatus.Finished && r.Position > 0 ? 0 : 1)
+            .ThenBy(r => r.Position > 0 ? r.Position : int.MaxValue)
+            .ToList();
     }
 
     public static int GetPointsForPosition(int position, PointsScoringRules rules)
@@ -96,37 +103,48 @@ public class CCUtils
         return qualified && started;
     }
 
+    // A driver registered to one of the season's teams (Driver.current_team_id points at a
+    // season.Teams id). Admits a genuine entrant on their first race of the year — who has no
+    // qualifying/start record yet — into the pick pool, without admitting practice-only guests
+    // who carry no team.
+    public static bool IsSeasonEntrant(Season season, Driver driver)
+    {
+        if (driver.CurrentTeamId.IsEmpty) return false;
+        return season.Teams.Any(t => t.Id == driver.CurrentTeamId);
+    }
+
     // Ranks every driver in the season by championship points through prevRace (the immediately
     // preceding race by round order, not "most recent race with results entered"), then filters
     // to positions strictly past positionCutoff. Round 1 (prevRace == null) has no cutoff at all
     // — every driver is eligible with champPos 0, unfiltered by HasQualifiedAndStarted: at season
     // start no driver has any participation history yet, so gating on it here would empty the
     // entire pick pool instead of just excluding guests. Ranks ALL season.Drivers (not just those
-    // who appear in stored RaceResults), so a driver with zero results still gets a real position
-    // — this matters for correctly excluding/including them relative to the cutoff. From round 2
-    // onward the returned pool is filtered to HasQualifiedAndStarted so practice-only guest/junior
-    // drivers who never actually raced drop out of eligibility once that record exists, without
-    // disturbing everyone else's champPos.
-    public static List<(Driver driver, int champPos)> GetEligibleDriversWithPos(
-        Season season, Race? prevRace, int positionCutoff)
-    {
-        if (prevRace == null)
-            return season.Drivers.Select(d => (d, 0)).ToList();
-
-        var ordered = season.Drivers
-            .Select(d => (driver: d, pts: GetDriverChampionshipPointSnapshotForRace(season, prevRace, d)))
-            .OrderByDescending(x => x.pts)
-            .ToList();
-
-        var result = new List<(Driver, int)>();
-        for (int i = 0; i < ordered.Count; i++)
-        {
-            int pos = i + 1;
-            if (pos > positionCutoff && HasQualifiedAndStarted(season, ordered[i].driver))
-                result.Add((ordered[i].driver, pos));
-        }
-        return result;
-    }
+// who appear in stored RaceResults), so a driver with zero results still gets a real position
+     // — this matters for correctly excluding/including them relative to the cutoff. From round 2
+     // onward the returned pool is filtered to HasQualifiedAndStarted OR IsSeasonEntrant so
+     // practice-only guest/junior drivers who never actually raced drop out of eligibility once
+     // that record exists, without disturbing everyone else's champPos — but a genuine entrant on
+     // their first race of the year (registered to a team, no qualifying/start record yet) is kept.
+     public static List<(Driver driver, int champPos)> GetEligibleDriversWithPos(
+         Season season, Race? prevRace, int positionCutoff)
+      {
+         if (prevRace == null)
+             return season.Drivers.Select(d => (d, 0)).ToList();
+ 
+         var ordered = season.Drivers
+              .Select(d => (driver: d, pts: GetDriverChampionshipPointSnapshotForRace(season, prevRace, d)))
+              .OrderByDescending(x => x.pts)
+              .ToList();
+ 
+         var result = new List<(Driver, int)>();
+         for (int i = 0; i < ordered.Count; i++)
+          {
+             int pos = i + 1;
+             if (pos > positionCutoff && (HasQualifiedAndStarted(season, ordered[i].driver) || IsSeasonEntrant(season, ordered[i].driver)))
+                 result.Add((ordered[i].driver, pos));
+          }
+         return result;
+      }
 
     // ── Confidence Cup pick scoring ───────────────────────────────────────────
 
