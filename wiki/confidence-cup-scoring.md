@@ -1,6 +1,6 @@
 # Confidence cup scoring (`CCUtils`)
 
-> As of `1f3cf1b`. Source: `Src/Utilities/ConfCupUtils.cs`, class `CCUtils`.
+> As of `e82f16c`. Source: `Src/Utilities/ConfCupUtils.cs`, class `CCUtils`.
 > Source-linked (not project-referenced) into `GPConf.McpServer` — see
 > [mcp-server.md](mcp-server.md) — so this is genuinely one implementation
 > shared by the desktop app and the MCP server, not two implementations kept
@@ -34,8 +34,14 @@ everywhere (see [data-model.md](data-model.md)).
   regardless of their stored position. This guarantees a DNF/DNS can never
   land in a points slot even if ingestion writes it a duplicate or unset
   `Position` (see the Round-14 incident in [log.md](log.md)). Drives the
-  `DrawResultsTable` ordering in [ui-layer.md](ui-layer.md) and the
-  championship-point snapshot (and therefore pick eligibility/multipliers).
+  `DrawResultsTable` ordering in [ui-layer.md](ui-layer.md), the
+  championship-point snapshot (and therefore pick eligibility/multipliers),
+  **and — as of `e82f16c` — the Discord bot's race-result rendering**: the
+  `/results` embed (`ReadCommands.BuildResultsEmbed`) and the `AnalysisFacts`
+  builders (recap classification, winner selection, team aggregates) all sort
+  through it, so a DNF/DNS/DSQ row (stored at `Position = 0` per the
+  ingestion convention) can never bubble above a classified finisher in a
+  Discord message.
 - `GetDriverChampionshipPointSnapshotForRace(season, race, driver)` —
   cumulative points for a driver through a given race (inclusive), iterating
   `season.Races` in list order and stopping once the target race is reached.
