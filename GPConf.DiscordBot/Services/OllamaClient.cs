@@ -74,11 +74,10 @@ public sealed class OllamaClient
     // surfaces as a null, which the caller reports as an empty response.
     private async Task<string?> PostChatAsync(ChatRequest request, CancellationToken ct)
     {
-        // Serialize the request the same way PostAsJsonAsync would (default camelCase
-        // JsonOptions) and log the EXACT bytes we send — needed to diff against the
-        // working Python probe when vLLM rejects the request.
+        // Post the explicitly-serialized body (rather than PostAsJsonAsync): vLLM rejected
+        // the PostAsJsonAsync encoding with an opaque 400 while accepting identical JSON
+        // posted as a StringContent body, so the serialization path is load-bearing.
         var json = JsonSerializer.Serialize(request);
-        Console.WriteLine($"[OllamaClient] -> POST {_baseUri}/v1/chat/completions  body({json.Length}ch): {json}");
         var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
         var response = await Http.PostAsync(new Uri(_baseUri, "/v1/chat/completions"), content, ct);
         if (!response.IsSuccessStatusCode)
@@ -87,7 +86,7 @@ public sealed class OllamaClient
             // EnsureSuccessStatusCode alone swallowed it and left every 4xx opaque.
             var err = await response.Content.ReadAsStringAsync(ct);
             if (err.Length > 1024) err = err[..1024];
-            Console.WriteLine($"[OllamaClient] <- {response.StatusCode} {response.ReasonPhrase}  error: {err}");
+            Console.WriteLine($"[OllamaClient] <- {(int)response.StatusCode} {response.ReasonPhrase}  error: {err}");
             throw new HttpRequestException(
                 $"{(int)response.StatusCode} {response.ReasonPhrase}: {err}");
         }
