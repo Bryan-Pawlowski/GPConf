@@ -48,7 +48,7 @@ public class DriverEditor
 
                 ImGui.TableSetColumnIndex(3);
                 Team? currentTeam = season.Teams.FirstOrDefault(t => t.Id == driver.CurrentTeamId);
-                string teamLabel = currentTeam?.Name.Length > 0 ? currentTeam.Name : "None";
+                string teamLabel = (currentTeam != null && currentTeam.Name.Length > 0) ? currentTeam.Name : "None";
 
                 // Color the combo button to match the current team.
                 int pushedColors = 0;

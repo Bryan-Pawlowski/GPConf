@@ -93,7 +93,7 @@ public class RaceConfig
         {
             Race moved = season.Races[dragSource];
             season.Races.RemoveAt(dragSource);
-            int insertAt = dragTarget > dragSource ? dragTarget : dragTarget;
+            int insertAt = dragTarget > dragSource ? dragTarget - 1 : dragTarget;
             season.Races.Insert(insertAt, moved);
         }
 

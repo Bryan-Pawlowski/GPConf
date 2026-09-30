@@ -188,10 +188,11 @@ public class GpConfApp
     }
 
     public void Clear()
-    {
-        _mainAppData.Seasons.Clear();
-        _mainAppData.CurrentSeason = new Season();
-    }
+     {
+         _mainAppData.Seasons.Clear();
+         _mainAppData.Leagues.Clear();
+         _mainAppData.CurrentSeason = new Season { Id = CCUtils.CreateUniqueId() };
+     }
 
     private void DoMenuBar()
     {

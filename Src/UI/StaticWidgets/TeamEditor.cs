@@ -60,7 +60,7 @@ public class TeamEditor
 
                 // Manufacturer picker.
                 Manufacturer? currentMfg = season.Manufacturers.FirstOrDefault(m => m.Id == team.ManufacturerId);
-                string mfgLabel = currentMfg?.Name.Length > 0 ? currentMfg.Name : "No Manufacturer";
+                string mfgLabel = (currentMfg != null && currentMfg.Name.Length > 0) ? currentMfg.Name : "No Manufacturer";
                 if (ImGui.BeginCombo("Manufacturer##teammfg", mfgLabel))
                 {
                     if (ImGui.Selectable("None", team.ManufacturerId.IsEmpty))

@@ -235,7 +235,7 @@ public class RaceUpdater
 
                 // Points rules picker.
                 PointsScoringRules? activeRules = season.Rules.FirstOrDefault(r => r.Id == rr.PointRulesId);
-                string rulesLabel = activeRules?.Name.Length > 0 ? activeRules.Name : "None";
+                string rulesLabel = (activeRules != null && activeRules.Name.Length > 0) ? activeRules.Name : "None";
                 if (ImGui.BeginCombo("Points Rules##rr", rulesLabel))
                 {
                     if (ImGui.Selectable("None", rr.PointRulesId.IsEmpty))
@@ -424,7 +424,7 @@ public class RaceUpdater
                 ImGui.TableSetColumnIndex(2);
                 bool teamPinned = !res.TeamId.IsEmpty;
                 // `team` is already resolved to the effective team (pinned override or driver fallback).
-                string teamLabel = team?.Name.Length > 0 ? team.Name : "-";
+                string teamLabel = (team != null && team.Name.Length > 0) ? team.Name : "-";
                 if (!teamPinned) teamLabel += " *";
                 ImGui.SetNextItemWidth(-1);
                 if (ImGui.BeginCombo("##teamoverride", teamLabel))

@@ -15,7 +15,11 @@ public class SeasonUpdater
         MainData data = app.GetMainData();
         ImGui.Begin("Season Updater");
 
-        Season currentSeason = data.CurrentSeason;
+        // After a save/reload, data.CurrentSeason is a separate protobuf copy from the
+        // matching entry in data.Seasons. Resolve against the list so edits always go
+        // to data.Seasons[i] and are visible to the Season Editor's save.
+        Season currentSeason = data.Seasons.FirstOrDefault(s => s.Id == data.CurrentSeason?.Id)
+                             ?? data.CurrentSeason;
         SeasonPicker.Draw(data, ref currentSeason);
         data.CurrentSeason = currentSeason;
 
