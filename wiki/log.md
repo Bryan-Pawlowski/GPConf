@@ -5,6 +5,22 @@ ingest. Newest first. Format: `YYYY-MM-DD — <what> — <pages touched> — <co
 
 ---
 
+**2026-09-30** — `4ae3b3f` switches `OllamaClient` from Ollama's native
+`/api/chat` to the OpenAI-compatible `/v1/chat/completions` endpoint: the
+in-use "splash" vLLM endpoint (the 48GB MacBook's resident Qwen3.8) is
+OpenAI-only, so the Ollama wrapper could never reach it (`/api/chat` → 404)
+and every `generate_and_post` / LLM analysis command failed. The request
+shape is now standard OpenAI (`model`, `messages`, `stream:false`,
+`max_tokens:16384`, `temperature`, `top_p`) — still OpenAI-compatible
+Ollama servers work via their `/v1` proxy, hence the unchanged class name
+and `OLLAMA_HOST` / `OLLAMA_MODEL` env vars, whose defaults now point at
+splash (`100.123.43.8:11436` / `incoai/Qwen3.8-27B-Splash`). The generous
+`max_tokens` is load-bearing: Qwen3.8 spends several thousand reasoning
+tokens before emitting content, so a tight cap truncates every reply to
+empty. Non-2xx responses now include the server error body in the
+`OllamaException` message. Pages touched:
+[llm-analysis-commands.md](llm-analysis-commands.md), [log.md](log.md). — `4ae3b3f`.
+
 **2026-09-29** — Committed the Round-14 confidence-cup fix plus a batch of
 working-tree changes as seven tightly-scoped commits:
 `14336bc` pins `LapData.team_id` at ingestion (practice/qualifying laps

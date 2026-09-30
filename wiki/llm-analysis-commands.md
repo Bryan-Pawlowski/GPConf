@@ -1,6 +1,6 @@
 # LLM analysis commands (Ollama)
 
-> As of `1f3cf1b`.
+> As of `4ae3b3f`.
 
 The Discord slash commands in `GPConf.DiscordBot` that take structured input
 (season/driver/player/team/race/league) generate narrative text via a
@@ -171,23 +171,32 @@ on each, so switching one dropdown doesn't visually lose the others.
 
 ## `OllamaClient` (`GPConf.DiscordBot/Services/OllamaClient.cs`)
 
-Singleton `HttpClient`, POSTs to Ollama's `/api/chat` (non-streaming,
-`"think": false`). Env vars, read once in the constructor:
+Singleton `HttpClient`, POSTs to the **OpenAI-compatible `/v1/chat/completions`**
+endpoint (non-streaming, `max_tokens: 16384`). The class kept its Ollama-era name,
+but the in-use "splash" endpoint is OpenAI-only — `/api/chat` returns 404 — so the
+request/response shape is the standard OpenAI one (`model`, `messages[]`,
+`stream`, `max_tokens`, `temperature`, `top_p`), which also works against an Ollama
+server that proxies `/v1`.
+
+`max_tokens` is deliberately generous: the resident Qwen3.8 model burns several
+thousand reasoning tokens before emitting a single content token, so a tight cap
+truncates every reply to empty (`finish_reason: "length"` with `content: ""`).
+
+Env vars, read once in the constructor:
 
 | Var | Default |
 |---|---|
-| `OLLAMA_HOST` | `scout:11434` (`http://` prepended if missing) |
-| `OLLAMA_MODEL` | `qwen3.8:27b-mlx` (was `muse-glimmer:30b-mlx` until 2026-08-14) |
+| `OLLAMA_HOST` | `100.123.43.8:11436` (splash vLLM; `http://` prepended if missing) |
+| `OLLAMA_MODEL` | `incoai/Qwen3.8-27B-Splash` |
 | `OLLAMA_TIMEOUT_SECONDS` | `180` |
 
 There is no caching/pre-generation — this is by design (the user explicitly
-accepted the on-demand wait over adding a cache layer). `"think": false` is
-sent regardless of model to suppress chain-of-thought output where the model
-supports it.
+accepted the on-demand wait over adding a cache layer).
 
-All Ollama failure modes (connection refused, DNS failure, timeout,
-malformed JSON) normalize into one `OllamaException`, caught once per
-command as a plain `⚠️` `FollowupAsync` — never an unhandled exception.
+All LLM failure modes (connection refused, DNS failure, timeout, a non-2xx with
+the server error body surfaced, malformed JSON) normalize into one
+`OllamaException`, caught once per command as a plain `⚠️` `FollowupAsync` — never
+an unhandled exception.
 
 ## Facts-block field lists
 
