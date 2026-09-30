@@ -1085,7 +1085,9 @@ public static class AnalysisFacts
             var resultText = string.Join(", ", teamResults.Select(dr =>
             {
                 var d = driverMap.GetValueOrDefault(dr.DriverId);
-                return $"P{dr.Position} {d?.Name ?? "unknown"} ({FormatStatus(dr.Status)})";
+                // DNF/DNS/DSQ rows are stored at Position 0; render the status instead of "P0".
+                var pos = dr.Position > 0 ? $"P{dr.Position}" : FormatStatus(dr.Status);
+                return $"{pos} {d?.Name ?? "unknown"} ({FormatStatus(dr.Status)})";
             }));
             raceLines.Add($"- Round {race.Round} {race.Name}: {resultText}");
 
