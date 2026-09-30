@@ -285,7 +285,7 @@ public static class AnalysisFacts
             var poleId = qualiOrder.FirstOrDefault();
             if (poleId is not null && !poleId.IsEmpty) poles[poleId] = poles.GetValueOrDefault(poleId) + 1;
 
-            var winner = mainResult?.Results.OrderBy(x => x.Position).FirstOrDefault();
+            var winner = mainResult is null ? null : CCUtils.GenerateRaceOrder(mainResult).FirstOrDefault();
             if (winner is not null)
             {
                 wins[winner.DriverId] = wins.GetValueOrDefault(winner.DriverId) + 1;
@@ -406,11 +406,12 @@ public static class AnalysisFacts
         sb.AppendLine("Race classification:");
         if (mainResult is not null)
         {
-            foreach (var dr in mainResult.Results.OrderBy(x => x.Position))
+            foreach (var dr in CCUtils.GenerateRaceOrder(mainResult))
             {
                 var d = driverMap.GetValueOrDefault(dr.DriverId);
                 var t = d is not null ? teamMap.GetValueOrDefault(d.CurrentTeamId) : null;
-                sb.AppendLine($"- P{dr.Position}: {d?.Name ?? "unknown"} ({t?.Name ?? "unknown"}), {FormatStatus(dr.Status)}, {dr.Points:F1} pts");
+                var posText = dr.Position > 0 ? $"P{dr.Position}" : $"{FormatStatus(dr.Status),-5}";
+                sb.AppendLine($"- {posText}: {d?.Name ?? "unknown"} ({t?.Name ?? "unknown"}), {FormatStatus(dr.Status)}, {dr.Points:F1} pts");
             }
         }
         else
@@ -1077,7 +1078,7 @@ public static class AnalysisFacts
             var mainResult = race.RaceResults.Where(rr => rr.IsComplete).OrderByDescending(rr => rr.Results.Count).FirstOrDefault();
             if (mainResult is null) continue;
 
-            var teamResults = mainResult.Results.Where(dr => teamDrivers.Any(d => d.Id == dr.DriverId)).OrderBy(dr => dr.Position).ToList();
+            var teamResults = CCUtils.GenerateRaceOrder(mainResult).Where(dr => teamDrivers.Any(d => d.Id == dr.DriverId)).ToList();
             if (teamResults.Count == 0) continue;
 
             racesRun++;
@@ -1168,7 +1169,7 @@ public static class AnalysisFacts
                 if (race.Round > cutoff.Round) break;
                 var mainResult = race.RaceResults.Where(rr => rr.IsComplete).OrderByDescending(rr => rr.Results.Count).FirstOrDefault();
                 if (mainResult is null) continue;
-                var teamResults = mainResult.Results.Where(dr => drivers.Any(d => d.Id == dr.DriverId)).OrderBy(dr => dr.Position).ToList();
+                var teamResults = CCUtils.GenerateRaceOrder(mainResult).Where(dr => drivers.Any(d => d.Id == dr.DriverId)).ToList();
                 if (teamResults.Count == 0) continue;
                 racesRun++;
                 foreach (var dr in teamResults)

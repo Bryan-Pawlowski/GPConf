@@ -147,10 +147,31 @@ public class ReadCommands : InteractionModuleBase<SocketInteractionContext>
             // the header has to live outside the ``` block.
             sb.AppendLine($"**{rr.RaceName}**");
             sb.AppendLine("```");
-            foreach (var dr in rr.Results.OrderBy(x => x.Position))
+
+            // Canonical classification order (shared with the confidence-cup scorer and the
+            // desktop results table): classified finishers first by position, non-finishers
+            // (DNF/DNS/DSQ — stored with no valid position) at the BOTTOM, behind every
+            // classified finisher. A plain OrderBy(Position) used to bubble every DNF to the
+            // top of the list, ahead of the P1 winner. Non-finishers render "—" for their
+            // row number; "..." separates the two groups when both are present.
+            var nonFinisher = false;
+            var hasClassified = false;
+            foreach (var dr in CCUtils.GenerateRaceOrder(rr))
             {
                 var team = teamMap.GetValueOrDefault(dr.TeamId);
                 if (dr.Position == 1) winnerColor = team?.Color ?? winnerColor;
+
+                var classified = dr.Status == FinishStatus.Finished && dr.Position > 0;
+                if (!classified && !nonFinisher)
+                {
+                    // A single "..." line between the classified group and the non-finishers —
+                    // but only when classified finishers actually precede them (not for an
+                    // all-DNF session, which would lead with a stray separator).
+                    if (hasClassified) sb.AppendLine("...");
+                    nonFinisher = true;
+                }
+                hasClassified |= classified;
+                var rankCell = classified ? $"{dr.Position,2}. " : "  —. ";
 
                 string pickStatus = "—";
                 if (rules is not null)
@@ -167,7 +188,7 @@ public class ReadCommands : InteractionModuleBase<SocketInteractionContext>
                 }
 
                 var trailing = $"{FormatStatus(dr.Status),-8} {pickStatus}";
-                sb.AppendLine(FormatRow(dr.Position, DriverLabel(driverMap.GetValueOrDefault(dr.DriverId)), TeamLabel(team), trailing));
+                sb.AppendLine(FormatRow(rankCell, DriverLabel(driverMap.GetValueOrDefault(dr.DriverId)), TeamLabel(team), trailing));
             }
             sb.AppendLine("```");
         }
@@ -603,6 +624,16 @@ public class ReadCommands : InteractionModuleBase<SocketInteractionContext>
         var name = Truncate(driverName, nameWidth).PadRight(nameWidth);
         var team = Truncate(teamName, teamWidth).PadRight(teamWidth);
         return $"{rank,2}. {name} {team} {trailing}";
+    }
+
+    // String-rank variant for rows where the leading cell is not a plain position number
+    // (e.g. non-finishers, which render " —. " instead of a rank). The rank cell is used as-is;
+    // width is still governed by the {2,} so columns stay aligned with the int overload.
+    private static string FormatRow(string rankCell, string driverName, string teamName, string trailing, int nameWidth = DriverWidth, int teamWidth = TeamWidth)
+    {
+        var name = Truncate(driverName, nameWidth).PadRight(nameWidth);
+        var team = Truncate(teamName, teamWidth).PadRight(teamWidth);
+        return $"{rankCell,5} {name} {team} {trailing}";
     }
 
     private static string Truncate(string s, int width) => s.Length <= width ? s : s[..width];
