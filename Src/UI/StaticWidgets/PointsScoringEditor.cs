@@ -98,5 +98,16 @@ public class PointsScoringEditor
 
         if (ImGui.Button("Add Ruleset##rules"))
             season.Rules.Add(new PointsScoringRules { Id = CCUtils.CreateUniqueId(), Name = "New Ruleset" });
+
+        ImGui.SameLine();
+        if (ImGui.BeginCombo("Load Preset##presets", "Load Preset..."))
+        {
+            foreach (PointsPresets.Preset preset in PointsPresets.All)
+            {
+                if (ImGui.Selectable(preset.DisplayName))
+                    season.Rules.Add(preset.Create());
+            }
+            ImGui.EndCombo();
+        }
     }
 }
