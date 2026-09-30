@@ -15,7 +15,14 @@ public sealed class OllamaClient
 {
     // Long-lived singleton for the whole bot process — safe here since it's never
     // repeatedly created/disposed (the usual socket-exhaustion failure mode).
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(180) };
+    //
+    // 600s default: a 4-section race-weekend preview (the generate_and_post path)
+    // needs ~250-300s of generation on the local 48GB M-series endpoint, so the old
+    // 180s ceiling timed out mid-generation before the bot could even truncate. Short
+    // calls (driver analysis, pick reveal) return in seconds, so a higher ceiling only
+    // lengthens the wait on a genuinely hung/slow model. Still overridable at startup
+    // via the OLLAMA_TIMEOUT_SECONDS env var below.
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(600) };
 
     private readonly Uri _baseUri;
     private readonly string _model;
