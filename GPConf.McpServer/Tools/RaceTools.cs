@@ -131,6 +131,37 @@ public class RaceTools(GpConfDataAccess data)
     }
 
     [McpServerTool]
+    [Description("Marks a race's stored results as complete (or incomplete) for confidence-cup scoring without re-passing the results. If sessionName is omitted, all RaceResults on the race are flipped; otherwise only the matching session. Use this to retroactively set isComplete on results that were ingested without it.")]
+    public string SetRaceComplete(
+        [Description("Season name or year")] string season,
+        [Description("Race name or round number")] string race,
+        [Description("Mark results as complete (true) or incomplete (false). Defaults to true.")] bool isComplete = true,
+        [Description("Optional session name to flip; if omitted, all sessions on the race are flipped.")] string? sessionName = null)
+    {
+        var mainData = data.Load();
+        var s = GpConfDataAccess.FindSeason(mainData, season);
+        if (s is null) return $"Season '{season}' not found.";
+
+        var r = GpConfDataAccess.FindRace(s, race);
+        if (r is null) return $"Race '{race}' not found in season '{s.Name}'. Use upsert_race first.";
+
+        var targets = string.IsNullOrWhiteSpace(sessionName)
+            ? r.RaceResults.ToList()
+            : r.RaceResults.Where(rr => rr.RaceName == sessionName).ToList();
+
+        if (targets.Count == 0)
+            return string.IsNullOrWhiteSpace(sessionName)
+                ? $"No race results stored for '{r.Name}'."
+                : $"No race result stored for '{r.Name}' with session '{sessionName}'.";
+
+        foreach (var rr in targets)
+            rr.IsComplete = isComplete;
+
+        data.Save(mainData);
+        return $"Marked {targets.Count} result set(s) for '{r.Name}' as {(isComplete ? "complete" : "incomplete")}.";
+    }
+
+    [McpServerTool]
     [Description("Sets qualifying results for a race. Pass results as a JSON array with fields: DriverName, Q1Time, Q2Time, Q3Time (seconds; 0 if did not participate), GridPosition, QualifyingStage (stage eliminated in, 0 = completed all), SessionName.")]
     public string SetQualifyingResults(
         [Description("Season name or year")] string season,
