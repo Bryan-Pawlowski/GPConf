@@ -187,8 +187,16 @@ Env vars, read once in the constructor:
 | Var | Default |
 |---|---|
 | `OLLAMA_HOST` | `100.123.43.8:11436` (splash vLLM; `http://` prepended if missing) |
-| `OLLAMA_MODEL` | `incoai/Qwen3.8-27B-Splash` |
+| `OLLAMA_MODEL` | `mlx-community/Qwen3.8-27B-4bit` |
 | `OLLAMA_TIMEOUT_SECONDS` | `180` |
+
+**The resident model tag changes per deployment** on the splash host (it was
+`incoai/Qwen3.8-27B-Splash` until the endpoint started serving only
+`mlx-community/Qwen3.8-27B-4bit`), and a stale name 404s with
+`{"error":{"code":"model_not_found"}}` — which fails every LLM-backed post.
+`GenerateAsync` therefore self-heals: on a `model_not_found` error it GETs
+`/v1/models`, adopts the first advertised id, logs the switch, and retries the
+same request once. `OLLAMA_MODEL` still wins as an explicit override.
 
 There is no caching/pre-generation — this is by design (the user explicitly
 accepted the on-demand wait over adding a cache layer).

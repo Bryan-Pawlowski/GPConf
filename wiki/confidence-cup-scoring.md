@@ -66,10 +66,10 @@ score = rules.BasePickScores[pickIndex] × standingsMultiplier(champPos)
 `GetPickScoreFromResults(season, rules, pickIndex, driverId, race, champPos)`
 — the canonical entry point used by both the app and the MCP server:
 
-1. Iterate only `race.RaceResults.Where(rr => rr.IsComplete)` — **this is the
-   `RaceResult.is_complete` field** (see
-   [data-model.md](data-model.md)). Incomplete/preview results don't count.
-2. For each complete session, find the driver's result and compute
+1. Iterate **all** `race.RaceResults` (regardless of `is_complete`) — since
+   the `is_complete` flag on a `RaceResult` is lost during JSON serialization
+   in the MCP response, relying on it causes all pick scoring to return 0.
+2. For each session, find the driver's result and compute
    `pts = CalculatePointsForResult(...)`. Skip the session if `pts <= 0` —
    the driver has to have actually scored points in that session for the
    pick to earn anything from it.

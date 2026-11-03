@@ -5,6 +5,199 @@ ingest. Newest first. Format: `YYYY-MM-DD — <what> — <pages touched> — <co
 
 ---
 
+**2026-11-02** — Finished the **Round 19 (GP de la Ciudad de Mexico) weekend**.
+The weekend's scheduled one-shots all fired and all failed again
+(`lastTaskResult 1`): FP3, qualifying and the race were never ingested, so the
+whole tail of the weekend was done by hand. Scraped
+`motorsport.com/f1/results/2026/mexican-gp-661693/?st={FP3,Q1,Q2,Q3,RACE}` and
+ingested FP3 (20 drivers), qualifying (22 drivers, 3 stages) and the race
+(22 rows, `isComplete: true`, `pointsRulesName: "Feature"`).
+
+Two entity gaps had to be fixed before the classification was complete:
+**`Ryo Hirakawa` did not exist in the season** (he replaced Ocon at Haas for
+the weekend), so his P10 was created via `upsert_driver` (50, Japan, Haas)
+rather than being dropped — dropping him left a hole at P10 and silently
+withheld a point. **`Liam Lawson`'s `CurrentTeamId` was stale** (Red Bull,
+showing him in the wrong team on every qualifying read); corrected to VCARB
+and qualifying re-ingested so the stored `LapData.TeamId`s refreshed.
+
+The classification is the **post-penalty** one: the stewards added Piastri
++10s (Lindblad collision), Colapinto +30s and Gasly +20s (yellow-flag
+infringements) after the flag, which moved Bortoleto, Hadjar and Hirakawa into
+the top ten. Verified position-for-position against the Wikipedia final
+classification — points, cumulative gaps and the P10 row all agree. Conventions
+applied: DNFs at position 0 with `LapsCompleted` = leader's laps − their laps
+(Lindblad 13, Bearman 24, Bottas 29, Stroll 66, Alonso 66), and `RaceTime` as
+the leader's time plus **cumulative** intervals (the source's `Gap` column is
+interval-to-car-ahead, not to the leader).
+
+Posted via the bot MCP: FP3, qualifying, race results, pick reveal, confidence
+cup leaderboard, championship standings, a hand-written confidence-cup blurb
+and the LLM analysis, then stripped the pick-announcement button. **Antonelli
+clinched the title** (380 vs Verstappen 261, 4 rounds left, 100 still
+available). `gpconf.data` 250,516 → 256,716 bytes, backed up first. Pages
+touched: [log.md](log.md) — data + Discord only, no tracked source changed. —
+uncommitted.
+
+---
+
+**2026-10-30** — Kicked off **Round 19 (GP de la Ciudad de Mexico)** by hand,
+because the automated chain never did: the `GPConf-NextKickoff-*` job that
+should have run on 2026-10-25 returned `lastTaskResult 1`, and worse, four
+duplicate `NextKickoff` tasks (one Bahrain + three USGP) were all armed to fire
+Sun 2026-11-01 — each one a full kickoff, i.e. four São Paulo kickoffs. Pruned
+them down to a single anchor (`GPConf-NextKickoff-GPdelaCiudaddeMexico`).
+
+Posted to Discord #race-week: the AI preview (3 sections), the confidence-cup
+picks post (built from the live `get_pick_eligibility` pool — top-5 cutoff,
+1.0x/1.5x/2.0x tiers verified per driver), the scoring-rules + deadline
+reminder, the `@here` picks-open announcement (deadline **2026-10-31 15:00
+Mexico City = 14:00 PDT**, epoch 1793480400), FP2 results, and an FP2 pace
+update. FP1 and FP2 were scraped from
+`https://www.motorsport.com/f1/results/2026/mexican-gp-661693/` and ingested
+via `set_practice_results` (FP1: 13 season drivers — the rest of the field was
+rookie stand-ins, dropped rather than stored with empty driver IDs; FP2: all
+22).
+
+Scheduler fixes, all in gitignored `.claude/skills/**` scripts:
+`schedule-race-week-cron.ps1` `ToEpoch` was applying the venue offset wrong
+(`HH:MM` folded into *minutes*-as-seconds and the sign inverted, so a 15:00
+local session was registered for 03:00) and used an invalid `-LogonType`
+parameter (PS 5.1 wants a `-Principal`); `schedule-pick-reminder.ps1` /
+`schedule-pick-lockin.ps1` baked a bare `claude` into the task action (now an
+absolute `~/.local/bin/claude.exe`). All three now `-ErrorAction Stop` so a
+failed registration can't print "Scheduled …" anyway. S4U principals need
+elevation on this host, so every job fell back to InteractiveToken (fires only
+with a live desktop session). Registered: `GPConf-FP3-…-20261031` (12:00 PT),
+`GPConf-Quali-…-20261031` (15:00 PT), `GPConf-Race-…-20261101` (14:00 PT),
+`GPConf-PickReminder-20261031-204500` (13:45 PT),
+`GPConf-PickLockIn-20261031-210000` (14:00 PT). Pages touched: [log.md](log.md)
+only — no tracked source changed. — uncommitted.
+
+---
+
+**2026-10-26** — Finished the **Round 18 (COTA / MSC Cruises United States GP)
+weekend** and posted everything to Discord #race-week. The weekend's five
+scheduled session jobs all fired and all failed (`lastTaskResult 1`): their
+`claude -p` prompts had the results URL mangled to `"=RACE"` (the `$BaseUrl`
+interpolation was lost in the prompt-building step — the same bash
+`$`-interpolation pitfall the cron skill warns about), so nothing was scraped.
+FP1/FP2 were already in the DB from an earlier pass; FP3, Q1/Q2/Q3 and the race
+were scraped live from `https://www.motorsport.com/f1/results/2026/united-states-gp-661690/?st=…`
+and ingested via `set_practice_results` / `set_qualifying_results` (one call per
+stage) / `set_race_results` (`isComplete: true`, `pointsRulesName: "Feature"`).
+All 22 drivers resolved; the 3 DNFs (Bearman lap 24, Colapinto lap 35, Bottas
+lap 48) store at position 0 with `Dnf` status per the standing convention. Then
+posted FP3, qualifying, race results, pick reveal, leaderboard, driver
+standings, the LLM post-race analysis, a hand-written Confidence Cup blurb, and
+stripped the pick-announcement button (`close_pick_announcement`).
+
+Two code fixes landed in the same cycle (both uncommitted):
+
+- **Qualifying classification order was inverted.** `ReadCommands.BuildQualiEmbed`
+  (×2), `AnalysisFacts.QualifyingOrder` and `QueryTools.GetQualifyingResults`
+  bucketed drivers with `x.stage == 0 ? 0 : x.stage == 2 ? 1 : 2` — a leftover
+  from a 0-indexed ingest path. Per-stage ingestion writes the **1-based** stage
+  actually reached (`3` = took part in Q3), so Q3 was landing in the same bucket
+  as Q1 casualties and the embed listed Q2 casualties as P1–P6. Now
+  `OrderByDescending(x => x.stage == 0 ? int.MaxValue : x.stage)` in all four
+  places (and `StageName(0)` renders "Q3"), which also fixes the already-stored
+  Round 16 / Round 17 classifications. Pages touched:
+  [data-model.md](data-model.md).
+- **`OllamaClient` failed every LLM post** because the splash endpoint no longer
+  serves `incoai/Qwen3.8-27B-Splash` (it 404s `model_not_found`; the resident
+  model is now `mlx-community/Qwen3.8-27B-4bit`). Default updated, and
+  `GenerateAsync` now self-heals: on `model_not_found` it reads `/v1/models`,
+  adopts the advertised id and retries once. Pages touched:
+  [llm-analysis-commands.md](llm-analysis-commands.md).
+
+- **`dotnet build` was broken repo-wide** by untracked scratch tooling: `Python/_picklog/PickLog.cs` (an ad-hoc C# project left in the tree, gitignored) got globbed into `GPConf.csproj`, yielding CS8802 (duplicate top-level statements) plus duplicate-assembly-attribute errors from its `obj/`. `GPConf.csproj` now excludes `Python\**` alongside the existing MCP-server / Discord-bot removals; the solution builds clean again.
+
+Also verified: the confidence-cup scores flow through (top score for the round:
+WildGingerBear 13; cumulative leader AWK0TAC0 216, chopper34 212, WildGingerBear
+204). The `GPConf-NextKickoff-*` task that should have kicked off **Round 19
+(Mexico City)** on 2026-10-25 18:00 also returned `lastTaskResult 1`, so Mexico
+has no pick announcement yet and its session jobs are not registered.
+
+---
+
+**2026-10-05** — Finished the **Round 16 (Sepang) weekend** and posted everything
+to Discord #race-week: FP1/FP2/FP3, qualifying (Q1/Q2/Q3), the race result,
+the Confidence Cup pick reveal, and the updated league leaderboard. Data was
+re-ingested from the motorsport.com results CSVs via
+`Python/_bahrain_reingest.py` (one script, all sessions; `IsComplete` set on
+the race and `pointsRulesName="feature"` passed to `set_race_results`, which
+resolves the season's **Feature** preset — 25/18/15/12/10/8/6/4/2/1 — by
+case-insensitive name). All 22 season drivers resolved to the season's driver
+DB (no unknowns). The 3 DNFs (Russell, Albon, Bottas — all off the lead lap
+after ~1–3 laps) are stored at position 0 with their on-track lap counts, per
+the standing data convention; the league reveal scores them 0 points.
+
+The scoring fix that made the above work landed uncommitted this cycle
+(13 files, +346/−61): `CCUtils` (in `Src/Utilities/ConfCupUtils.cs`) drops the
+`IsComplete` gate in `GetPickScoreFromResults` (counts any session with
+recorded results) and adds a case-insensitive rules-name fallback in
+`GetPointsScoringRulesByName` for when `PointRulesId` is empty. The Discord
+bot now flows `race.PointRulesId` → `GetScoreMultiplier` for pick-reveal and
+uses `GenerateRaceOrder()` (see [confidence-cup-scoring.md](confidence-cup-scoring.md))
+as its single source of truth for result ordering. Pages touched:
+[confidence-cup-scoring.md](confidence-cup-scoring.md) (2.0/0.5 history +
+single-math-source rule), [ui-layer.md](ui-layer.md)
+(RaceWeekendDashboard/PointsPresets/LeagueUpdater status),
+[race-data-pipeline.md](race-data-pipeline.md) (re-ingest script + cron gap).
+Data: `gpconf.data` re-saved with Bahrain sessions. — uncommitted
+(.gitignore, GPConf.DiscordBot/{Commands,Services,Tools}/*.cs,
+GPConf.McpServer/Tools/QueryTools.cs, Src/UI/LeagueUpdater.cs,
+Src/UI/StaticWidgets/{PointsPresets,RaceWeekendDashboard}.cs,
+Src/Utilities/ConfCupUtils.cs, wiki/confidence-cup-scoring.md, wiki/log.md).
+
+**2026-09-30** — Added a **cron self-recovery** one-shot for the Round 16 Sepang
+weekend: `GPConf-CronFix-BaseUrl-Sepang-2026` (fires 2026-10-01 21:00 PT =
+04:00 UTC, just before FP1). The 5 data-ingest one-shots were registered with a
+best-guess motorsport.com base URL (`2026/bahrain-gp-in-malaysia`) because the
+*actual* results-page slug is unresolvable before the weekend exists (motorsport.com
+pages are JS-gated; Brave hasn't indexed the new event page). The fix job runs
+`cronfix/fix_baseurl.ps1`, which drives the web-research bot's `web_research`
+plugin (scratch `resolve_slug.py`, 3× retry) to find the real slug, then
+re-registers the per-session jobs via `schedule-race-week-cron.ps1` with the
+correct base URL (idempotent). If the slug can't be found it leaves the jobs in
+place (their retry logic copes). Data/automation only; no source changed. —
+uncommitted.
+
+**2026-09-30** — Kicked off the race weekend for **Round 16: Formula 1 Gulf Air
+Bahrain Grand Prix in Malaysia** (Sepang, UTC+8) via the `race-weekend-prep`
+skill. Posted to Discord (#race-week): (1) an AI-written weekend preview
+(Track & History / Storylines Since Baku / What To Watch) and (2) a dedicated
+Confidence Cup Picks post (strong picks in the 1.0× tier — Verstappen, Piastri,
+Hadjar; value picks in the 1.5×/2.0× tiers — Albon, Bottas, Alonso, Hulkenberg,
+Stroll, Sainz) — the 5 top-ranked drivers (Antonelli, Russell, Hamilton, Norris,
+Leclerc) are locked and un-pickable. Then the deterministic steps: pick-deadline
+reminder (Sat 16:00 local = **epoch 1791039600** = 08:00 UTC), the picks-open
+@here announcement (deadline recorded on the race), and the two pick one-shots
+(`GPConf-PickReminder-20261003-144500` @ 15 min before, `GPConf-PickLockIn-
+20261003-150000` @ the deadline). Also registered the race-week-cron automation:
+FP1/FP2 (Oct 2), FP3 + Qualifying (Oct 3), Race + race-end (Oct 4) plus the
+self-perpetuating `GPConf-NextKickoff-…` (Sunday 18:00, will auto-derive
+Singapore R17). All one-shots `Ready`. The single 4-section `generate_and_post`
+call timed out on the splash model's ~11k `reasoning_content` budget, so the
+preview and picks were split into two smaller LLM calls — documented in
+`.claude/skills/race-weekend-prep/SKILL.md`. Data + automation only; no source
+changed. — uncommitted.
+
+**2026-09-30** — Corrected the app's 2026 calendar in `gpconf.data` (F1 Official
+Season '26) after a web-research pass (via the `research` bot's `web_research`
+tool) confirmed F1's **official** `formula1.com/racing/2026` schedule. The season
+was seeded with 22 rounds (Bahrain + Saudi Arabia originally dropped for the
+Middle East) but F1 has since **added back a Bahrain GP, rescheduled to the
+Sepang International Circuit in Malaysia for 2–4 October**, making it Round 16.
+The live store still carried the old 22-round calendar (Singapore = R16), so the
+upcoming races were stale. Inserted the Bahrain-in-Malaysia GP as R16 and
+renumbered Singapore→R17, US→R18, Mexico→R19, Brazil→R20, Las Vegas→R21, Qatar→R22,
+Abu Dhabi→R23 (23 rounds, all with official dates); verified via a fresh
+`get_season` read. No results/standings affected (renumbered rounds 16–22 had no
+dates/deadlines/announcement IDs and results link by name/id, not round). Data
+store only — no wiki code page covers the calendar. — uncommitted (data change).
+
 **2026-09-30** — `4ae3b3f` switches `OllamaClient` from Ollama's native
 `/api/chat` to the OpenAI-compatible `/v1/chat/completions` endpoint: the
 in-use "splash" vLLM endpoint (the 48GB MacBook's resident Qwen3.8) is
