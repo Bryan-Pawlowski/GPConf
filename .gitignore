@@ -64,3 +64,53 @@ riderModule.iml
 /Installer/output/
 /ExampleRaceData/
 /.claude/
+
+# Scratch / transient debug files from LLM-driven sessions
+# (kept outside the repo; see the gpconf-race-session-ingest skill for the
+# canonical standing files that *should* stay tracked under Python/)
+/Python/__pycache__/
+/Python/*.pyc
+/Python/*.log
+/Python/*_err.txt
+/Python/test_*.py
+/Python/try_*.py
+/Python/verify_*.py
+/Python/debug_*.py
+/Python/check_*.py
+/Python/args_*.json
+/Python/mcp_server_err.txt
+/Python/mcp_discord_*.py
+/Python/verify_fix*.py
+/Python/*_query.json
+/Python/*_query2.json
+/Python/baku_*.json
+/Python/bahrain_*.json
+/Python/all_*.py
+/Python/count_*.py
+/Python/list_*.json
+/Python/get_season*.json
+/Python/empty.json
+/Python/season_*.json
+/Python/ingest_*.py
+/Python/parse_*.py
+/Python/args_*.json
+/Python/post_*.py
+/Python/examine_*.py
+/Python/_*
+/Python/_probe.csproj
+/Python/mcp_call.py
+
+# RaceData: keep the scraped CSVs, ignore LLM-generated derivatives
+/RaceData/converted/
+/RaceData/__pycache__/
+/RaceData/*_*.py
+
+# Root-level transient files (LLM scratch)
+/.az_*.txt
+/az_*.md
+/az_*.json
+/f1-tulip-*
+/nul
+/season_arg.json
+/tmp*
+/bah_*.json

@@ -37,4 +37,14 @@
       <Content Remove="GPConf.DiscordBot\**" />
     </ItemGroup>
 
+    <!-- Scratch tooling lives under Python/ (e.g. Python/_picklog/PickLog.cs, an ad-hoc
+         C# project). Excluding the whole tree keeps its top-level statements and its
+         obj/*.AssemblyInfo.cs out of this project's glob — without this the app build
+         fails with CS8802 / duplicate-assembly-attribute noise. -->
+    <ItemGroup>
+      <Compile Remove="Python\**" />
+      <None    Remove="Python\**" />
+      <Content Remove="Python\**" />
+    </ItemGroup>
+
 </Project>
