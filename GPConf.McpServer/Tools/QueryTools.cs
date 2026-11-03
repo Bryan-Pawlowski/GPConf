@@ -113,10 +113,11 @@ public class QueryTools(GpConfDataAccess data)
             .Select(g => g.OrderByDescending(x => x.stage).First())
             .ToList();
 
-        // Stage 0 = made Q3; Stage 2 = eliminated Q2; Stage 1 = eliminated Q1.
-        // Sort: Q3 drivers first by lap time ASC, then Q2, then Q1.
+        // Stage is the stage number a driver last took part in (3 = made Q3, 2 = eliminated Q2,
+        // 1 = eliminated Q1); legacy data sometimes stores 0 for "completed all".
+        // Sort highest stage first (0 treated as top), then by lap time ASC.
         var ordered = allEntries
-            .OrderBy(x => x.stage == 0 ? 0 : x.stage == 2 ? 1 : 2)
+            .OrderByDescending(x => x.stage == 0 ? int.MaxValue : x.stage)
             .ThenBy(x => x.ld.FastestLapSeconds > 0 ? x.ld.FastestLapSeconds : float.MaxValue)
             .Select((x, idx) => new
             {
@@ -177,7 +178,9 @@ public class QueryTools(GpConfDataAccess data)
         // The next race with no recorded results is the one players are picking for.
         var target = s.Races
             .OrderBy(r => r.Round)
-            .FirstOrDefault(r => r.RaceResults.All(rr => !rr.IsComplete));
+            // Count any race with recorded results (regardless of IsComplete).
+            // Historical data may have RaceResult.IsComplete left False.
+            .FirstOrDefault(r => !r.RaceResults.Any());
         if (target is null) return $"No upcoming (undecided) race found for season '{s.Name}' — every race has complete results.";
 
         var prevRace = s.Races.OrderBy(r => r.Round).LastOrDefault(r => r.Round < target.Round);
@@ -257,7 +260,10 @@ public class QueryTools(GpConfDataAccess data)
 
             if (picks is not null)
             {
-                bool hasResults = r.RaceResults.Any(rr => rr.IsComplete);
+                // Count any race with recorded results (regardless of IsComplete).
+                // Some historical data has RaceResult.IsComplete left False — the
+                // race results are still valid for scoring.
+                bool hasResults = r.RaceResults.Any();
                 for (int i = 0; i < picks.DriverId.Count; i++)
                 {
                     var   dId    = picks.DriverId[i];
@@ -394,7 +400,9 @@ public class QueryTools(GpConfDataAccess data)
                 var champPts = prevRace is not null ? ComputeChampionshipPoints(season, prevRace) : [];
                 var champPos = BuildChampionshipPositions(champPts);
 
-                bool hasResults = race.RaceResults.Any(rr => rr.IsComplete);
+                // Count any race with recorded results (regardless of IsComplete).
+                // Some historical data has RaceResult.IsComplete left False.
+                bool hasResults = race.RaceResults.Any();
                 foreach (var player in gs.ParticipatingPlayers)
                 {
                     var picks = gameRace.PicksPerPlayer.FirstOrDefault(pp => pp.PlayerId == player.Id);

@@ -570,7 +570,9 @@ public class PickCommands : InteractionModuleBase<SocketInteractionContext>
         var prevRace = s.Races.OrderBy(x => x.Round).LastOrDefault(x => x.Round < race.Round);
         var champPts = prevRace is not null ? _data.ChampionshipPoints(s, prevRace) : [];
         var champPos = _data.ChampionshipPositions(champPts);
-        bool hasResults = race.RaceResults.Any(rr => rr.IsComplete);
+        // Count any race with recorded results (regardless of IsComplete).
+        // Historical data may have RaceResult.IsComplete left False.
+        bool hasResults = race.RaceResults.Any();
 
         var sb = new StringBuilder();
         float total = 0f;

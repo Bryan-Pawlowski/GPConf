@@ -29,7 +29,9 @@ public sealed class DataService
     /// simply the highest-numbered scheduled race, which may be a not-yet-run future round.</summary>
     public Race? LatestRace(Season season) =>
         season.Races
-            .Where(r => r.RaceResults.Any(rr => rr.IsComplete))
+            // Count any race with recorded results (regardless of IsComplete).
+            // Historical data may have RaceResult.IsComplete left False.
+            .Where(r => r.RaceResults.Any())
             .OrderByDescending(r => r.Round)
             .FirstOrDefault();
 
@@ -128,7 +130,9 @@ public sealed class DataService
                     var picks = gameRace.PicksPerPlayer.FirstOrDefault(pp => pp.PlayerId == player.Id);
                     if (picks is null) continue;
 
-                    bool hasResults = race.RaceResults.Any(rr => rr.IsComplete);
+                    // Count any race with recorded results (regardless of IsComplete).
+                    // Historical data may have RaceResult.IsComplete left False.
+                    bool hasResults = race.RaceResults.Any();
                     for (int i = 0; i < picks.DriverId.Count; i++)
                     {
                         var dId = picks.DriverId[i];
@@ -162,7 +166,9 @@ public sealed class DataService
                 var prevRace = season.Races.OrderBy(r => r.Round).LastOrDefault(r => r.Round < race.Round);
                 var champPts = prevRace is not null ? ChampionshipPoints(season, prevRace) : [];
                 var champPos = ChampionshipPositions(champPts);
-                bool hasResults = race.RaceResults.Any(rr => rr.IsComplete);
+                // Count any race with recorded results (regardless of IsComplete).
+                // Historical data may have RaceResult.IsComplete left False.
+                bool hasResults = race.RaceResults.Any();
 
                 foreach (var player in gs.ParticipatingPlayers)
                 {
@@ -249,10 +255,12 @@ public sealed class DataService
         //    caller) in both League.Players and GameSeason.ParticipatingPlayers, matching how
         //    the two lists already relate for every existing player (same Id, duplicated by value).
         var isNewPlayer = false;
-        var player = gs.ParticipatingPlayers.FirstOrDefault(p => p.PlayerName.Equals(callerDisplayName, StringComparison.OrdinalIgnoreCase));
+        // Canonical (0↔O, 1↔I, case-insensitive) match so a display-name variant of an existing
+        // player can't spawn a duplicate record — the root cause of the awkOtacO split.
+        var player = CCUtils.FindPlayerByCanonicalName(gs.ParticipatingPlayers, callerDisplayName);
         if (player is null)
         {
-            player = league.Players.FirstOrDefault(p => p.PlayerName.Equals(callerDisplayName, StringComparison.OrdinalIgnoreCase));
+            player = CCUtils.FindPlayerByCanonicalName(league.Players, callerDisplayName);
             if (player is not null)
             {
                 gs.ParticipatingPlayers.Add(player);

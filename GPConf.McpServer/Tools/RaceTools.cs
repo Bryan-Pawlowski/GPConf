@@ -258,11 +258,34 @@ public class RaceTools(GpConfDataAccess data)
         return $"Saved FP{sessionNumber} data ({session.LapData.Count} drivers) for '{r.Name}'.";
     }
 
-    private static FinishStatus ParseStatus(string status) => status.ToUpperInvariant() switch
+    private static FinishStatus ParseStatus(string status) => status.Trim().ToUpperInvariant() switch
     {
-        "DNF" => FinishStatus.Dnf,
-        "DNS" => FinishStatus.Dns,
-        "DSQ" => FinishStatus.Dsq,
-        _     => FinishStatus.Finished,
+        ""                    => FinishStatus.Finished,
+        "DNF"                 => FinishStatus.Dnf,
+        "DNS"                 => FinishStatus.Dns,
+        "DSQ"                 => FinishStatus.Dsq,
+        "RETIREMENT"          => FinishStatus.Dnf,
+        "RETIRED"             => FinishStatus.Dnf,
+        "RET"                 => FinishStatus.Dnf,
+        "ACCIDENT"            => FinishStatus.Dnf,
+        "CRASH"               => FinishStatus.Dnf,
+        "COLLISION"           => FinishStatus.Dnf,
+        "MECHANICAL"          => FinishStatus.Dnf,
+        "ENGINE"              => FinishStatus.Dnf,
+        "GBOX"                => FinishStatus.Dnf,
+        "GEARBOX"             => FinishStatus.Dnf,
+        "RADIATOR"            => FinishStatus.Dnf,
+        "FRONT WING"          => FinishStatus.Dnf,
+        "HYDRAULIC"           => FinishStatus.Dnf,
+        "SUSPENSION"          => FinishStatus.Dnf,
+        "ELECTRICAL"          => FinishStatus.Dnf,
+        "OVERHEAT"            => FinishStatus.Dnf,
+        "POWER UNIT"          => FinishStatus.Dnf,
+        "INJURED"             => FinishStatus.Dnf,
+        "INELIGIBLE"          => FinishStatus.Dsq,
+        "DISQUALIFIED"        => FinishStatus.Dsq,
+        "PENALTY"             => FinishStatus.Dsq,
+        "PENALTISED"          => FinishStatus.Dsq,
+        _                     => FinishStatus.Finished,
     };
 }

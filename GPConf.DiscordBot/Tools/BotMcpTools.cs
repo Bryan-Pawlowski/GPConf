@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Globalization;
 using Discord;
 using Discord.WebSocket;
@@ -238,6 +238,97 @@ public class BotMcpTools(DiscordSocketClient client, DataService data, OllamaCli
 
         var (_, gs) = data.FindGameSeason(mainData, s, league);
         var embed = ReadCommands.BuildResultsEmbed(data, s, r, gs);
+        return await SendAsync(channelId, ephemeral, dmUserId, embed);
+    }
+
+    // Sprint weekends (2023+ F1 calendar): there is no dedicated sprint proto field. The
+    // sprint race is ingested via set_race_results as a SECOND, separate RaceResult (a distinct
+    // race_name, e.g. "Sprint Race", linked to a "Sprint" PointsScoringRules entry), so
+    // post_race_results with race_name targets it directly; the sprint quali is just a
+    // QualifyingSession in the shared qualifying_sessions. This tool is only for the
+    // sprint-race post.
+    [McpServerTool]
+    [Description("Posts the sprint weekend's SPRINT RACE result (not the feature race). " +
+                 "Sprint results are stored as a separate RaceResult with its own race_name " +
+                 "(the second result you entered via set_race_results with the Sprint points rules). " +
+                 "Reuses the exact embed /results shows, with confidence-cup pick attribution when " +
+                 "a league is resolved. Post the feature race with post_race_results instead.")]    public async Task<string> PostSprintResults(
+        [Description("Season name or year")] string season,
+        [Description("Race name or round (the feature race this sprint belongs to)")] string race,
+        [Description("Optional: the exact race_name the sprint result was entered under (e.g. 'Sprint " +
+                     "Race'). If omitted, every RaceResult whose name differs from the feature race " +
+                     "is posted — there should only ever be one.")] string? raceName = null,
+        [Description("League name (optional, enables confidence-cup pick attribution)")] string? league = null,
+        [Description("If true, DM dmUserId instead of posting to the channel.")] bool ephemeral = false,
+        [Description("Discord user ID to DM when ephemeral is true")] string? dmUserId = null,
+        [Description("Discord channel ID to post to. Falls back to CONF_DISCORD_CHANNEL_ID if omitted.")] string? channelId = null)
+    {
+        var mainData = data.Load();
+        var s = data.FindSeason(mainData, season);
+        if (s is null) return $"Season '{season}' not found.";
+        var r = data.FindRace(s, race);
+        if (r is null) return $"Race '{race}' not found in {s.Name}.";
+
+        var candidates = r.RaceResults
+            .Where(rr => raceName is null ? rr.RaceName != r.Name : rr.RaceName == raceName)
+            .ToList();
+        if (candidates.Count == 0)
+            return raceName is null
+                ? $"No sprint race result stored for '{r.Name}'."
+                : $"No sprint race result named '{raceName}' stored for '{r.Name}'.";
+        if (candidates.Count > 1)
+            return $"Ambiguous: {r.Name} has {candidates.Count} non-feature results ({string.Join(", ", candidates.Select(c => c.RaceName))}) — pass raceName to pick one.";
+
+        var (_, gs) = data.FindGameSeason(mainData, s, league);
+        var embed = ReadCommands.BuildResultsEmbed(data, s, r, gs, candidates[0]);
+        return await SendAsync(channelId, ephemeral, dmUserId, embed);
+    }
+
+    [McpServerTool]
+    [Description("Posts a practice session's results (fastest-lap classification) for a race, reusing the exact " +
+                 "embed /practice shows. Call once per session (1, 2, or 3 — on a sprint weekend the " +
+                 "sprint practice is simply the next session number) after the session's data is ingested " +
+                 "into GPConf — e.g. from the race-week data-entry automation right after scraping the session. " +
+                 "Returns a notice instead of posting if the session has no data stored yet.")]
+    public async Task<string> PostPracticeResults(
+        [Description("Season name or year")] string season,
+        [Description("Race name or round")] string race,
+        [Description("Practice session number: 1, 2, or 3 (or the sprint-practice number on sprint weekends)")] int sessionNumber,
+        [Description("If true, DM dmUserId instead of posting to the channel.")] bool ephemeral = false,
+        [Description("Discord user ID to DM when ephemeral is true")] string? dmUserId = null,
+        [Description("Discord channel ID to post to. Falls back to CONF_DISCORD_CHANNEL_ID if omitted.")] string? channelId = null)
+    {
+        var mainData = data.Load();
+        var s = data.FindSeason(mainData, season);
+        if (s is null) return $"Season '{season}' not found.";
+        var r = data.FindRace(s, race);
+        if (r is null) return $"Race '{race}' not found in {s.Name}.";
+
+        var embed = ReadCommands.BuildPracticeEmbed(data, s, r, sessionNumber);
+        return await SendAsync(channelId, ephemeral, dmUserId, embed);
+    }
+
+    [McpServerTool]
+    [Description("Posts the qualifying results for a race (all Q1/Q2/Q3 stages, merged to each driver's best lap, " +
+                 "in grid order — pole at the top), reusing the exact embed /quali shows. Call after qualifying " +
+                 "data is ingested into GPConf — e.g. from the race-week data-entry automation. " +
+                 "On sprint weekends, the sprint qualifying is a separate session with its own data; " +
+                 "post it with post_sprint_results instead. Returns a notice instead of posting if no data is stored yet.")]
+    public async Task<string> PostQualifyingResults(
+        [Description("Season name or year")] string season,
+        [Description("Race name or round")] string race,
+        [Description("If true, DM dmUserId instead of posting to the channel.")] bool ephemeral = false,
+        [Description("Discord user ID to DM when ephemeral is true")] string? dmUserId = null,
+        [Description("Discord channel ID to post to. Falls back to CONF_DISCORD_CHANNEL_ID if omitted.")] string? channelId = null)
+    {
+        var mainData = data.Load();
+        var s = data.FindSeason(mainData, season);
+        if (s is null) return $"Season '{season}' not found.";
+        var r = data.FindRace(s, race);
+        if (r is null) return $"Race '{race}' not found in {s.Name}.";
+        if (r.QualifyingSessions.Count == 0) return $"No qualifying data stored for '{r.Name}'.";
+
+        var embed = ReadCommands.BuildQualiEmbed(data, s, r);
         return await SendAsync(channelId, ephemeral, dmUserId, embed);
     }
 

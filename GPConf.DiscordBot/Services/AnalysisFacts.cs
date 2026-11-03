@@ -59,8 +59,9 @@ public static class AnalysisFacts
 
             var practiceText = PracticeSummary(race, driver.Id) is { } p ? $"practice: {p}" : "no practice data";
 
+            // Count any race with recorded results (regardless of IsComplete).
+            // Historical data may have RaceResult.IsComplete left False.
             var sessionLines = race.RaceResults
-                .Where(rr => rr.IsComplete)
                 .Select(rr => (rr.RaceName, dr: rr.Results.FirstOrDefault(x => x.DriverId == driver.Id)))
                 .Where(x => x.dr is not null)
                 .Select(x => $"{x.RaceName}: P{x.dr!.Position} ({FormatStatus(x.dr.Status)}), {x.dr.Points:F1} pts")
@@ -68,7 +69,9 @@ public static class AnalysisFacts
 
             if (sessionLines.Count == 0 && qualiIdx < 0) continue; // driver didn't participate this weekend at all
 
-            foreach (var (rr, dr) in race.RaceResults.Where(rr => rr.IsComplete).Select(rr => (rr, rr.Results.FirstOrDefault(x => x.DriverId == driver.Id))))
+            // Count any race with recorded results (regardless of IsComplete).
+            // Historical data may have RaceResult.IsComplete left False.
+            foreach (var (rr, dr) in race.RaceResults.Select(rr => (rr, rr.Results.FirstOrDefault(x => x.DriverId == driver.Id))))
             {
                 if (dr is null) continue;
                 finishPositions.Add(dr.Position);
@@ -196,9 +199,9 @@ public static class AnalysisFacts
             raceLines.Add($"- Round {rps.Race.Round} {rps.Race.Name}: {score:F1} pts (running total {running:F1})");
 
             // Which drivers were picked stays out of the favorite-picks/slot-tendency aggregate
-            // until the race is decided — the score above is fine to show (it's just a number),
-            // but the driver identity for a still-open race is meant to stay secret until then.
-            if (!rps.Race.RaceResults.Any(rr => rr.IsComplete)) continue;
+            // Count any race with recorded results (regardless of IsComplete).
+            // Historical data may have RaceResult.IsComplete left False.
+            if (!rps.Race.RaceResults.Any()) continue;
 
             var gameRace = gs.Races.FirstOrDefault(gr => gr.RaceId == rps.Race.Id);
             var picks = gameRace?.PicksPerPlayer.FirstOrDefault(pp => pp.PlayerId == player.Id);
@@ -248,8 +251,13 @@ public static class AnalysisFacts
     {
         var driverMap = season.Drivers.ToDictionary(d => d.Id, d => d);
         var teamMap = season.Teams.ToDictionary(t => t.Id, t => t);
-        var completedRaces = season.Races
-            .Where(r => r.Round <= cutoff.Round && r.RaceResults.Any(rr => rr.IsComplete))
+        // Count any race with recorded results (regardless of IsComplete).
+        // Historical data may have RaceResult.IsComplete left False.
+        // Count any race with recorded results (regardless of IsComplete).
+                // Count any race with recorded results (regardless of IsComplete).
+                // Historical data may have RaceResult.IsComplete left False.
+                var completedRaces = season.Races
+                    .Where(r => r.Round <= cutoff.Round && r.RaceResults.Any())
             .OrderBy(r => r.Round)
             .ToList();
 
@@ -280,7 +288,9 @@ public static class AnalysisFacts
 
         foreach (var race in completedRaces)
         {
-            var mainResult = race.RaceResults.Where(rr => rr.IsComplete).OrderByDescending(rr => rr.Results.Count).FirstOrDefault();
+            // Count any race with recorded results (regardless of IsComplete).
+                // Historical data may have RaceResult.IsComplete left False.
+                var mainResult = race.RaceResults.OrderByDescending(rr => rr.Results.Count).FirstOrDefault();
             var qualiOrder = QualifyingOrder(race);
             var poleId = qualiOrder.FirstOrDefault();
             if (poleId is not null && !poleId.IsEmpty) poles[poleId] = poles.GetValueOrDefault(poleId) + 1;
@@ -385,7 +395,7 @@ public static class AnalysisFacts
             var fastest = practice.LapData.Where(ld => ld.FastestLapSeconds > 0).OrderBy(ld => ld.FastestLapSeconds).FirstOrDefault();
             if (fastest is null) continue;
             var d = driverMap.GetValueOrDefault(fastest.DriverId);
-            sb.AppendLine($"FP{practice.SessionNumber} fastest: {d?.Name ?? "unknown"} ({fastest.FastestLapSeconds:F3}s)");
+            sb.AppendLine($"FP{practice.SessionNumber} fastest: {d?.Name ?? "unknown"} ({FormatLapTime(fastest.FastestLapSeconds)})");
         }
         sb.AppendLine();
 
@@ -398,7 +408,9 @@ public static class AnalysisFacts
         })));
         sb.AppendLine();
 
-        var mainResult = race.RaceResults.Where(rr => rr.IsComplete).OrderByDescending(rr => rr.Results.Count).FirstOrDefault();
+        // Count any race with recorded results (regardless of IsComplete).
+                // Historical data may have RaceResult.IsComplete left False.
+                var mainResult = race.RaceResults.OrderByDescending(rr => rr.Results.Count).FirstOrDefault();
         var prevRace = season.Races.OrderBy(r => r.Round).LastOrDefault(r => r.Round < race.Round);
         var champPtsPrev = prevRace is not null ? data.ChampionshipPoints(season, prevRace) : [];
         var champPosPrev = data.ChampionshipPositions(champPtsPrev);
@@ -458,7 +470,7 @@ public static class AnalysisFacts
 
             var fastestLap = mainResult.Results.Where(dr => dr.FastestLapSeconds > 0).OrderBy(dr => dr.FastestLapSeconds).FirstOrDefault();
             if (fastestLap is not null)
-                sb.AppendLine($"- Fastest lap: {driverMap.GetValueOrDefault(fastestLap.DriverId)?.Name ?? "unknown"} ({fastestLap.FastestLapSeconds:F3}s)");
+                sb.AppendLine($"- Fastest lap: {driverMap.GetValueOrDefault(fastestLap.DriverId)?.Name ?? "unknown"} ({FormatLapTime(fastestLap.FastestLapSeconds)})");
         }
 
         if (gs is not null && league is not null)
@@ -526,7 +538,7 @@ public static class AnalysisFacts
             .SelectMany(qs => qs.LapData.Select(ld => (stage: qs.Stage, ld)))
             .GroupBy(x => x.ld.DriverId)
             .Select(g => g.OrderByDescending(x => x.stage).First())
-            .OrderBy(x => x.stage == 0 ? 0 : x.stage == 2 ? 1 : 2)
+            .OrderByDescending(x => x.stage == 0 ? int.MaxValue : x.stage)
             .ThenBy(x => x.ld.FastestLapSeconds > 0 ? x.ld.FastestLapSeconds : float.MaxValue)
             .Select(x => x.ld.DriverId)
             .ToList();
@@ -541,7 +553,7 @@ public static class AnalysisFacts
         return stages.Count > 0 ? stages.Max() : null;
     }
 
-    private static string StageName(int stage) => stage switch { 1 => "Q1", 2 => "Q2", 3 => "Q3", _ => $"stage {stage}" };
+    private static string StageName(int stage) => stage switch { 1 => "Q1", 2 => "Q2", 3 or 0 => "Q3", _ => $"stage {stage}" };
 
     private static string? PracticeSummary(Race race, ByteString driverId)
     {
@@ -549,7 +561,7 @@ public static class AnalysisFacts
             .Select(p => (session: p.SessionNumber, lap: p.LapData.FirstOrDefault(ld => ld.DriverId == driverId)))
             .Where(x => x.lap is not null && x.lap.FastestLapSeconds > 0)
             .ToList();
-        return laps.Count > 0 ? string.Join(", ", laps.Select(x => $"FP{x.session} {x.lap!.FastestLapSeconds:F3}s")) : null;
+        return laps.Count > 0 ? string.Join(", ", laps.Select(x => $"FP{x.session} {FormatLapTime(x.lap!.FastestLapSeconds)}")) : null;
     }
 
     private static string FormatStatus(FinishStatus status) => status switch
@@ -577,7 +589,8 @@ public static class AnalysisFacts
     {
         var driverMap = season.Drivers.ToDictionary(d => d.Id, d => d);
         var completedRaces = season.Races
-            .Where(r => r.Round <= cutoff.Round && r.RaceResults.Any(rr => rr.IsComplete))
+            .Where(r => r.Round <= cutoff.Round && r// Race with any recorded results (regardless of IsComplete).
+                .RaceResults.Any())
             .OrderBy(r => r.Round)
             .ToList();
 
@@ -592,7 +605,9 @@ public static class AnalysisFacts
 
         foreach (var race in completedRaces)
         {
-            var mainResult = race.RaceResults.Where(rr => rr.IsComplete).OrderByDescending(rr => rr.Results.Count).FirstOrDefault();
+            // Count any race with recorded results (regardless of IsComplete).
+                // Historical data may have RaceResult.IsComplete left False.
+                var mainResult = race.RaceResults.OrderByDescending(rr => rr.Results.Count).FirstOrDefault();
             if (mainResult is null) continue;
             var qualiOrder = QualifyingOrder(race);
 
@@ -643,7 +658,9 @@ public static class AnalysisFacts
         var wins = new List<(string driver, int round)>();
         foreach (var race in completedRaces)
         {
-            var mainResult = race.RaceResults.Where(rr => rr.IsComplete).OrderByDescending(rr => rr.Results.Count).FirstOrDefault();
+            // Count any race with recorded results (regardless of IsComplete).
+                // Historical data may have RaceResult.IsComplete left False.
+                var mainResult = race.RaceResults.OrderByDescending(rr => rr.Results.Count).FirstOrDefault();
             if (mainResult is null) continue;
             foreach (var dr in mainResult.Results.Where(x => x.Position == 1))
                 wins.Add((driverMap.GetValueOrDefault(dr.DriverId)?.Name ?? "unknown", race.Round));
@@ -689,7 +706,9 @@ public static class AnalysisFacts
 
             foreach (var rps in perRace)
             {
-                if (!rps.Race.RaceResults.Any(rr => rr.IsComplete)) continue;
+                // Count any race with recorded results (regardless of IsComplete).
+                // Historical data may have RaceResult.IsComplete left False.
+                if (!rps.Race.RaceResults.Any()) continue;
                 var gameRace = gs.Races.FirstOrDefault(gr => gr.RaceId == rps.Race.Id);
                 if (gameRace is null) continue;
                 foreach (var picks in gameRace.PicksPerPlayer)
@@ -712,8 +731,11 @@ public static class AnalysisFacts
             var missedCount = 0;
             foreach (var race in completedRaces)
             {
-                if (!race.RaceResults.Any(rr => rr.IsComplete)) continue;
-                var mainResult = race.RaceResults.Where(rr => rr.IsComplete).OrderByDescending(rr => rr.Results.Count).FirstOrDefault();
+                if (!race// Race with any recorded results (regardless of IsComplete).
+                .RaceResults.Any()) continue;
+                // Count any race with recorded results (regardless of IsComplete).
+                // Historical data may have RaceResult.IsComplete left False.
+                var mainResult = race.RaceResults.OrderByDescending(rr => rr.Results.Count).FirstOrDefault();
                 if (mainResult is null) continue;
                 var gameRace = gs.Races.FirstOrDefault(gr => gr.RaceId == race.Id);
                 if (gameRace is null) continue;
@@ -745,7 +767,9 @@ public static class AnalysisFacts
             foreach (var p in gs.ParticipatingPlayers)
                 zeroScoreWeeks[p.Id] = 0;
             foreach (var rps in perRace)
-                if (rps.Race.RaceResults.Any(rr => rr.IsComplete))
+                // Count any race with recorded results (regardless of IsComplete).
+                // Historical data may have RaceResult.IsComplete left False.
+                if (rps.Race.RaceResults.Any())
                     foreach (var kv in rps.ScoreByPlayer)
                         if ((kv.Value ?? 0f) <= 0f)
                             zeroScoreWeeks[kv.Key] = zeroScoreWeeks.GetValueOrDefault(kv.Key) + 1;
@@ -811,7 +835,9 @@ public static class AnalysisFacts
         foreach (var race in season.Races.OrderBy(r => r.Round))
         {
             if (race.Round > cutoff.Round) break;
-            var mainResult = race.RaceResults.Where(rr => rr.IsComplete).OrderByDescending(rr => rr.Results.Count).FirstOrDefault();
+            // Count any race with recorded results (regardless of IsComplete).
+                // Historical data may have RaceResult.IsComplete left False.
+                var mainResult = race.RaceResults.OrderByDescending(rr => rr.Results.Count).FirstOrDefault();
             if (mainResult is null) continue;
 
             var drA = mainResult.Results.FirstOrDefault(x => x.DriverId == driverA.Id);
@@ -882,7 +908,7 @@ public static class AnalysisFacts
         if (aFastestLaps.Count > 0 && bFastestLaps.Count > 0)
         {
             var diff = aFastestLaps.Average() - bFastestLaps.Average();
-            sb.AppendLine($"- Avg fastest-lap gap: {(diff < 0 ? driverA.Name : driverB.Name)} {(Math.Abs(diff) < 0.001 ? "level" : $"{Math.Abs(diff):F3}s faster")}");
+            sb.AppendLine($"- Avg fastest-lap gap: {(diff < 0 ? driverA.Name : driverB.Name)} {(Math.Abs(diff) < 0.001 ? "level" : $"{FormatLapTime(Math.Abs(diff))} faster")}");
         }
         if (aRaceTimes.Count > 0 && bRaceTimes.Count > 0)
         {
@@ -898,7 +924,7 @@ public static class AnalysisFacts
         if (aPracticeLaps.Count > 0 && bPracticeLaps.Count > 0)
         {
             var diff = aPracticeLaps.Average() - bPracticeLaps.Average();
-            sb.AppendLine($"- Avg practice gap: {(diff < 0 ? driverA.Name : driverB.Name)} {(Math.Abs(diff) < 0.001 ? "level" : $"{Math.Abs(diff):F3}s faster")}");
+            sb.AppendLine($"- Avg practice gap: {(diff < 0 ? driverA.Name : driverB.Name)} {(Math.Abs(diff) < 0.001 ? "level" : $"{FormatLapTime(Math.Abs(diff))} faster")}");
         }
 
         return sb.ToString();
@@ -930,7 +956,9 @@ public static class AnalysisFacts
 
         foreach (var rps in perRace)
         {
-            if (!rps.Race.RaceResults.Any(rr => rr.IsComplete)) continue;
+            // Count any race with recorded results (regardless of IsComplete).
+            // Historical data may have RaceResult.IsComplete left False.
+            if (!rps.Race.RaceResults.Any()) continue;
             var gameRace = gs.Races.FirstOrDefault(gr => gr.RaceId == rps.Race.Id);
             if (gameRace is null) continue;
 
@@ -1075,7 +1103,9 @@ public static class AnalysisFacts
         foreach (var race in season.Races.OrderBy(r => r.Round))
         {
             if (race.Round > cutoff.Round) break;
-            var mainResult = race.RaceResults.Where(rr => rr.IsComplete).OrderByDescending(rr => rr.Results.Count).FirstOrDefault();
+            // Count any race with recorded results (regardless of IsComplete).
+                // Historical data may have RaceResult.IsComplete left False.
+                var mainResult = race.RaceResults.OrderByDescending(rr => rr.Results.Count).FirstOrDefault();
             if (mainResult is null) continue;
 
             var teamResults = CCUtils.GenerateRaceOrder(mainResult).Where(dr => teamDrivers.Any(d => d.Id == dr.DriverId)).ToList();
@@ -1169,7 +1199,9 @@ public static class AnalysisFacts
             foreach (var race in season.Races.OrderBy(r => r.Round))
             {
                 if (race.Round > cutoff.Round) break;
-                var mainResult = race.RaceResults.Where(rr => rr.IsComplete).OrderByDescending(rr => rr.Results.Count).FirstOrDefault();
+                // Count any race with recorded results (regardless of IsComplete).
+                // Historical data may have RaceResult.IsComplete left False.
+                var mainResult = race.RaceResults.OrderByDescending(rr => rr.Results.Count).FirstOrDefault();
                 if (mainResult is null) continue;
                 var teamResults = CCUtils.GenerateRaceOrder(mainResult).Where(dr => drivers.Any(d => d.Id == dr.DriverId)).ToList();
                 if (teamResults.Count == 0) continue;

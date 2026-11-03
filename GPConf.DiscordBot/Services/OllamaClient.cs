@@ -25,7 +25,7 @@ public sealed class OllamaClient
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(600) };
 
     private readonly Uri _baseUri;
-    private readonly string _model;
+    private string _model;
 
     public OllamaClient()
     {
@@ -34,7 +34,7 @@ public sealed class OllamaClient
             !host.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             host = "http://" + host;
         _baseUri = new Uri(host);
-        _model = Environment.GetEnvironmentVariable("OLLAMA_MODEL") ?? "incoai/Qwen3.8-27B-Splash";
+        _model = Environment.GetEnvironmentVariable("OLLAMA_MODEL") ?? "mlx-community/Qwen3.8-27B-4bit";
 
         if (int.TryParse(Environment.GetEnvironmentVariable("OLLAMA_TIMEOUT_SECONDS"), out var timeoutSeconds))
             Http.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
@@ -57,6 +57,33 @@ public sealed class OllamaClient
             if (string.IsNullOrWhiteSpace(content))
                 throw new OllamaException("The model returned an empty response.");
             return content;
+        }
+        catch (HttpRequestException ex) when (ex.Message.Contains("model_not_found"))
+        {
+            // The endpoint's resident model tag changed (the "splash" host renames it per
+            // deployment — e.g. incoai/Qwen3.8-27B-Splash -> mlx-community/Qwen3.8-27B-4bit),
+            // so the configured name 404s. Ask /v1/models what it actually serves and retry once
+            // instead of failing the whole post. Cached on the instance for the process lifetime.
+            var resolved = await ResolveServedModelAsync(ct);
+            if (resolved is null)
+                throw new OllamaException(
+                    $"The LLM endpoint at {_baseUri} does not serve the configured model '{_model}' and " +
+                    "did not report an alternative from /v1/models.", ex);
+
+            Console.WriteLine($"[OllamaClient] model '{_model}' not found; retrying with '{resolved}'.");
+            try
+            {
+                var content = await PostChatAsync(request with { Model = resolved }, ct);
+                if (string.IsNullOrWhiteSpace(content))
+                    throw new OllamaException("The model returned an empty response.");
+                return content;
+            }
+            catch (Exception retryEx) when (retryEx is not OllamaException)
+            {
+                throw new OllamaException(
+                    $"The LLM endpoint at {_baseUri} failed with the auto-resolved model '{resolved}' ({retryEx.Message}).",
+                    retryEx);
+            }
         }
         catch (OllamaException)
         {
@@ -101,6 +128,25 @@ public sealed class OllamaClient
         return parsed?.Choices?[^1]?.Message?.Content;
     }
 
+    // Asks the endpoint which models it serves and adopts the first one.
+    private async Task<string?> ResolveServedModelAsync(CancellationToken ct)
+    {
+        try
+        {
+            var list = await Http.GetFromJsonAsync<ModelList>(new Uri(_baseUri, "/v1/models"), ct);
+            var served = list?.Data?.FirstOrDefault(d => !string.IsNullOrWhiteSpace(d.Id))?.Id;
+            if (string.IsNullOrWhiteSpace(served))
+                return null;
+            _model = served;
+            return served;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[OllamaClient] /v1/models lookup failed: {ex.Message}");
+            return null;
+        }
+    }
+
     private sealed record ChatRequest(
         [property: JsonPropertyName("model")] string Model,
         [property: JsonPropertyName("messages")] ChatMessage[] Messages,
@@ -118,6 +164,12 @@ public sealed class OllamaClient
 
     private sealed record ChatResponse(
         [property: JsonPropertyName("choices")] ChatChoice[]? Choices);
+
+    private sealed record ModelList(
+        [property: JsonPropertyName("data")] ModelEntry[]? Data);
+
+    private sealed record ModelEntry(
+        [property: JsonPropertyName("id")] string Id);
 
     private sealed record ChatChoice(
         [property: JsonPropertyName("message")] ChatMessage? Message,

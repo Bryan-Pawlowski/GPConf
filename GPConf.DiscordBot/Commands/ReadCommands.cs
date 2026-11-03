@@ -108,10 +108,13 @@ public class ReadCommands : InteractionModuleBase<SocketInteractionContext>
     // driver ids, not each player's individual pick score.
     // gs is null when no league's scoring rules could be resolved; results still render without it.
     // Shared with BotMcpTools.post_race_results — same reasoning as BuildStandingsEmbed above.
-    internal static Embed BuildResultsEmbed(DataService data, Season s, Race r, GameSeason? gs)
+    // Specific picks which RaceResult(s) get rendered — by default every result stored on the race,
+    // or a specific single result (e.g. the sprint race on a sprint weekend).
+    internal static Embed BuildResultsEmbed(DataService data, Season s, Race r, GameSeason? gs, params RaceResult[] specific)
     {
         var driverMap = s.Drivers.ToDictionary(d => d.Id, d => d);
         var teamMap = s.Teams.ToDictionary(t => t.Id, t => t);
+        var resultsToRender = (IEnumerable<RaceResult>)(specific.Length > 0 ? (IEnumerable<RaceResult>)specific : (IEnumerable<RaceResult>)r.RaceResults);
 
         var pickedDriverIds = new HashSet<ByteString>();
         PickRules? rules = null;
@@ -137,7 +140,7 @@ public class ReadCommands : InteractionModuleBase<SocketInteractionContext>
             sb.AppendLine("✅×N = picked, eligible, scored · ➖×N = picked, eligible, no points · ❌ = picked, ineligible · ❗×N = eligible, unpicked, scored\n");
         uint winnerColor = 0;
         var first = true;
-        foreach (var rr in r.RaceResults)
+        foreach (var rr in resultsToRender)
         {
             if (!first) sb.AppendLine();
             first = false;
@@ -225,7 +228,7 @@ public class ReadCommands : InteractionModuleBase<SocketInteractionContext>
             .ToList();
 
         var poleColor = allEntries
-            .OrderBy(x => x.stage == 0 ? 0 : x.stage == 2 ? 1 : 2)
+            .OrderByDescending(x => x.stage == 0 ? int.MaxValue : x.stage)
             .ThenBy(x => x.ld.FastestLapSeconds > 0 ? x.ld.FastestLapSeconds : float.MaxValue)
             .Select(x =>
             {
@@ -237,7 +240,7 @@ public class ReadCommands : InteractionModuleBase<SocketInteractionContext>
             .FirstOrDefault();
 
         var ordered = allEntries
-            .OrderBy(x => x.stage == 0 ? 0 : x.stage == 2 ? 1 : 2)
+            .OrderByDescending(x => x.stage == 0 ? int.MaxValue : x.stage)
             .ThenBy(x => x.ld.FastestLapSeconds > 0 ? x.ld.FastestLapSeconds : float.MaxValue)
             .Select((x, i) =>
             {
@@ -331,7 +334,9 @@ public class ReadCommands : InteractionModuleBase<SocketInteractionContext>
     // via the Pick Lock-In skill) that calls for an unconditional reveal.
     private IEnumerable<Player> VisiblePlayers(Season s, Race r, GameSeason gs)
     {
-        bool raceDecided = r.RaceResults.Any(rr => rr.IsComplete);
+        // Count any race with recorded results (regardless of IsComplete).
+        // Historical data may have RaceResult.IsComplete left False.
+        bool raceDecided = r.RaceResults.Any();
         if (raceDecided) return gs.ParticipatingPlayers;
 
         var usernames = new[] { Context.User.Username, Context.User.GlobalName }
@@ -361,7 +366,11 @@ public class ReadCommands : InteractionModuleBase<SocketInteractionContext>
                 var rows = new List<(string driver, string team, float score)>();
                 if (picks is not null)
                 {
-                    bool hasResults = r.RaceResults.Any(rr => rr.IsComplete);
+                    // Count any race with recorded results (regardless of IsComplete).
+                    // SetRaceResults with isComplete=True should set IsComplete, but some
+                    // historical data has RaceResult.IsComplete left False — the race
+                    // results are still valid for scoring; the flag is a scoring hint.
+                    bool hasResults = r.RaceResults.Any();
                     for (int i = 0; i < picks.DriverId.Count; i++)
                     {
                         var dId = picks.DriverId[i];
@@ -586,7 +595,14 @@ public class ReadCommands : InteractionModuleBase<SocketInteractionContext>
     }
 
     private static string FormatLap(float? seconds) =>
-        seconds is null ? "—" : $"{seconds:F3}s";
+        seconds is null ? "—" : FormatLapTime(seconds.Value);
+
+    // Formats a lap/qualifying time in seconds as m:ss.fff (e.g. 83.456 -> "1:23.456").
+    private static string FormatLapTime(float seconds)
+    {
+        var ts = TimeSpan.FromSeconds(seconds);
+        return $"{(int)ts.TotalMinutes}:{ts.Seconds:00}.{ts.Milliseconds:000}";
+    }
 
     // Presence of a multiplier already implies eligible, so a separate checkmark is redundant —
     // this keeps the marker short enough to fit on one line in Discord's narrow mobile embed
