@@ -9,6 +9,39 @@ public class CCUtils
         return Google.Protobuf.ByteString.CopyFrom(System.Guid.NewGuid().ToByteArray());
     }
 
+    /// <summary>Canonicalizes a player name so visually-identical variants collapse to one key:
+    /// 0→O, 1→I, l→I (uppercased). This is what the duplicate-Player bug was — a player whose
+    /// Discord display name is "AWK0TAC0" (zero) vs. a GUI entry "awkOtacO" (letter O) are
+    /// visually identical but fail <c>PlayerName.Equals(OrdinalIgnoreCase)</c>. Comparing via
+    /// <see cref="SamePlayerName"/> keeps them on a single Player record.</summary>
+    public static string CanonicalizeName(string name)
+    {
+        if (name is null) return string.Empty;
+        var sb = new System.Text.StringBuilder(name.Length);
+        foreach (var c in name)
+            sb.Append(c switch
+            {
+                '0' => 'O',
+                '1' => 'I',
+                'l' => 'I',
+                _   => char.ToUpperInvariant(c)
+            });
+        return sb.ToString();
+    }
+
+    /// <summary>Case- and visually-insensitive player-name comparison (see <see cref="CanonicalizeName"/>).</summary>
+    public static bool SamePlayerName(string a, string b) =>
+        CanonicalizeName(a) == CanonicalizeName(b);
+
+    /// <summary>Finds a Player whose canonical name matches <paramref name="name"/>, or null.
+    /// Used at every Player-creation/resolution site so a name variant can never spawn a
+    /// duplicate record.</summary>
+    public static Player? FindPlayerByCanonicalName(IEnumerable<Player>? players, string name)
+    {
+        if (players is null) return null;
+        return players.FirstOrDefault(p => SamePlayerName(p.PlayerName, name));
+    }
+
     public static int GetDriverChampionshipPointSnapshotForRace(Season currentSeason, Race race, Driver driver)
     {
         var races = currentSeason.Races;
@@ -183,7 +216,8 @@ public class CCUtils
         Season season, PickRules rules, int pickIndex, ByteString driverId, Race race, int champPos)
     {
         float total = 0f;
-        foreach (RaceResult rr in race.RaceResults.Where(rr => rr.IsComplete))
+        // Count any race with recorded results (regardless of IsComplete).
+        foreach (RaceResult rr in race.RaceResults)
         {
             RaceDriverResult? rdr = rr.Results.FirstOrDefault(r => r.DriverId == driverId);
             if (rdr == null) continue;
@@ -220,6 +254,19 @@ public class CCUtils
             if (ruleSet.Id != pointsScoringRulesId) { continue; }
             outRuleSet = ruleSet;
             break;
+        }
+        // If PointRulesId is empty (no pointsRulesName was passed at ingest),
+        // fall back to the first/default ruleset so scoring still works.
+        // Also match by a few well-known fallback names in case the rule was
+        // created before this code path existed.
+        if (outRuleSet == null && season.Rules.Count > 0)
+        {
+            var name = pointsScoringRulesId.ToStringUtf8();
+            if (string.IsNullOrEmpty(name))
+                outRuleSet = season.Rules.First();
+            else
+                outRuleSet = season.Rules.FirstOrDefault(
+                    r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase));
         }
         return outRuleSet;
     }

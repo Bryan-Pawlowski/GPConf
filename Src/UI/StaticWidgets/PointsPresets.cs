@@ -16,7 +16,7 @@ public static class PointsPresets
             () => new PointsScoringRules
             {
                 Id = CCUtils.CreateUniqueId(),
-                Name = "F1 2025 (Grand Prix)",
+                Name = "F1 Grand Prix",
                 Score = { 25, 18, 15, 12, 10, 8, 6, 4, 2, 1 },
                 ConfCupMultiplier = 1.0f
             }

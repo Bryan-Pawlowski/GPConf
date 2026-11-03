@@ -124,15 +124,10 @@ public static class RaceWeekendDashboard
             return;
         }
 
-        int complete = results.Count(r => r.IsComplete);
-        Vector4 color = complete == count
-            ? ColorHasResults
-            : complete > 0
-                ? ColorNoResults
-                : default;
-        bool colored = complete > 0;
-        if (colored) ImGui.PushStyleColor(ImGuiCol.Text, color);
-        ImGui.TextUnformatted($"{count} results ({complete} complete)");
-        if (colored) ImGui.PopStyleColor();
+        // All recorded results are treated as complete (regardless of IsComplete flag).
+        Vector4 color = count > 0 ? ColorHasResults : default;
+        if (count > 0) ImGui.PushStyleColor(ImGuiCol.Text, color);
+        ImGui.TextUnformatted($"{count} results");
+        if (count > 0) ImGui.PopStyleColor();
     }
 }

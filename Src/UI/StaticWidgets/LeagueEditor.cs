@@ -98,7 +98,10 @@ public class LeagueEditor
         if (toRemove != null)
             league.Players.Remove(toRemove);
 
-        if (ImGui.Button("Add Player##addplayer"))
+        // Only allow "Add Player" if "New Player" doesn't already exist (canonical name match) —
+        // otherwise a duplicate of an existing player gets created with a fresh Id.
+        if (CCUtils.FindPlayerByCanonicalName(league.Players, "New Player") is null &&
+            ImGui.Button("Add Player##addplayer"))
             league.Players.Add(new Player { Id = CCUtils.CreateUniqueId(), PlayerName = "New Player" });
     }
 
@@ -223,10 +226,12 @@ public class LeagueEditor
         if (toRemove != null)
             gs.ParticipatingPlayers.Remove(toRemove);
 
-        // Only show league players not already participating.
+        // Only show league players not already participating — match by Id OR canonical name so a
+        // visually-identical name variant (0↔O) of an existing participant isn't added twice.
         var takenIds  = gs.ParticipatingPlayers.Select(p => p.Id).ToHashSet();
+        var takenNames = gs.ParticipatingPlayers.Select(p => CCUtils.CanonicalizeName(p.PlayerName)).ToHashSet();
         var available = league.Players
-            .Where(p => !takenIds.Contains(p.Id))
+            .Where(p => !takenIds.Contains(p.Id) && !takenNames.Contains(CCUtils.CanonicalizeName(p.PlayerName)))
             .OrderBy(p => p.PlayerName)
             .ToList();
 

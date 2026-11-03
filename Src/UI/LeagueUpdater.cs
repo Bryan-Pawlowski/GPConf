@@ -137,7 +137,7 @@ public class LeagueUpdater
     {
         PickRules rules      = gs.PickRules!;
         int       numPicks   = Math.Max(0, rules.NumPicks);
-        bool      hasResults = race.RaceResults.Any(rr => rr.IsComplete);
+        bool      hasResults = race.RaceResults.Any();
 
         if (numPicks == 0)
         {
@@ -436,7 +436,7 @@ public class LeagueUpdater
             Race      race       = orderedRaces[rIdx];
             Race?     prev       = rIdx > 0 ? orderedRaces[rIdx - 1] : null;
             GameRace? gr         = gs.Races.FirstOrDefault(g => g.RaceId == race.Id);
-            bool      hasResults = race.RaceResults.Any(rr => rr.IsComplete);
+            bool      hasResults = race.RaceResults.Any();
             if (gr == null) continue;
 
             var eligible = CCUtils.GetEligibleDriversWithPos(season, prev, rules.PositionCutoff);
@@ -576,7 +576,7 @@ public class LeagueUpdater
                 ImGui.TableSetColumnIndex(1); CenterText(FormatLapTime(time));
                 ImGui.TableSetColumnIndex(2);
                 float gap = time - best;
-                CenterText(gap < 0.001f ? "—" : $"+{gap:F3}s");
+                CenterText(gap < 0.001f ? "—" : $"+{FormatLapTime(gap)}");
                 ImGui.TableSetColumnIndex(3); CenterText($"FP{session}");
             }
 
@@ -1077,8 +1077,7 @@ public class LeagueUpdater
 
     private static string FormatLapTime(float seconds)
     {
-        int   mins = (int)(seconds / 60);
-        float secs = seconds % 60;
-        return mins > 0 ? $"{mins}:{secs:00.000}" : $"{secs:F3}s";
+        var ts = TimeSpan.FromSeconds(seconds);
+        return $"{(int)ts.TotalMinutes}:{ts.Seconds:00}.{ts.Milliseconds:000}";
     }
 }
